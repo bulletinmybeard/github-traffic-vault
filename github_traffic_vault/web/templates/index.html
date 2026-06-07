@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <h1>GitHub Traffic Vault</h1>
+    <div class="topbar-meta">
+        {% if sync %}
+        <span class="last-sync">
+            last sync:
+            <strong>{{ sync.finished_at.strftime("%Y-%m-%d %H:%M") if sync.finished_at else "in flight" }}</strong>
+            (run #{{ sync.id }})
+            <span class="sep">|</span>
+            ok={{ sync.repos_ok }}/{{ sync.repos_total }}
+            {% if sync.repos_err %}<span class="err">err={{ sync.repos_err }}</span>{% endif %}
+            <span class="sep">|</span>
+            rate={{ sync.rate_remaining if sync.rate_remaining is not none else "?" }}
+        </span>
+        {% else %}
+        <span class="last-sync muted">no sync yet</span>
+        {% endif %}
+        <form method="post" action="/sync" class="sync-form">
+            <input type="hidden" name="next" value="/?days={{ days }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn sync-btn">
+                <span class="spinner" aria-hidden="true"></span>
+                <span class="label">Sync Now</span>
+                <span class="label-loading">Syncing...</span>
+            </button>
+        </form>
+    </div>
+</header>
+
+{% if error %}
+<div class="banner err">{{ error }}</div>
+{% endif %}
+
+<div class="section-meta">
+    <span class="window-label">window: last {{ days }} days</span>
+</div>
+
+<section class="grid">
+    {% for t in tiles %}
+    <a class="tile" href="/{{ t.full_name }}?days={{ days }}">
+        <div class="tile-slug-row">
+            <div class="tile-slug">
+                <span class="owner">{{ t.owner }}/</span><span class="name">{{ t.name }}</span>
+            </div>
+            <div class="tile-tags">
+                {% if t.stargazers %}<span class="badge stars" title="stars">&#9733; {{ t.stargazers }}</span>{% endif %}
+                {% if t.is_archived %}<span class="tag archived">archived</span>{% endif %}
+                {% if t.is_fork %}<span class="tag fork">fork</span>{% endif %}
+            </div>
+        </div>
+        <div class="tile-stats">
+            <div class="stat-row period-14d">
+                <span class="period-label">{{ days }}d</span>
+                <span class="metric views">
+                    <strong>{{ t.total_views }}</strong> view{{ '' if t.total_views == 1 else 's' }}
+                    <span class="uniq">({{ t.total_v_uniques }}u)</span>
+                </span>
+                <span class="metric clones">
+                    <strong>{{ t.total_clones }}</strong> clone{{ '' if t.total_clones == 1 else 's' }}
+                    <span class="uniq">({{ t.total_c_uniques }}u)</span>
+                </span>
+            </div>
+            <div class="stat-row period-today {% if t.today_views == 0 and t.today_clones == 0 %}zero{% endif %}">
+                <span class="period-label">today</span>
+                <span class="metric views">
+                    <strong>{{ t.today_views }}</strong> view{{ '' if t.today_views == 1 else 's' }}
+                    <span class="uniq">({{ t.today_v_uniques }}u)</span>
+                </span>
+                <span class="metric clones">
+                    <strong>{{ t.today_clones }}</strong> clone{{ '' if t.today_clones == 1 else 's' }}
+                    <span class="uniq">({{ t.today_c_uniques }}u)</span>
+                </span>
+            </div>
+        </div>
+    </a>
+    {% else %}
+    <p class="muted">No repos yet. Click <em>Sync Now</em> to fetch traffic data.</p>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Traffic Vault</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        // Disable the sync button + show a spinner while the request is
+        // in flight. Plain form POST (no htmx), so the browser navigates
+        // to the redirect target when sync completes.
+        document.addEventListener("submit", function (e) {
+            let form = e.target;
+            if (!form.classList.contains("sync-form")) {
+                return;
+            }
+            let btn = form.querySelector("button[type=submit]");
+            if (!btn) {
+                return;
+            }
+            btn.disabled = true;
+            btn.classList.add("loading");
+        });
+    </script>
+</body>
+</html>

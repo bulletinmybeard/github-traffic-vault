@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <h1><a href="/" class="back">GitHub Traffic Vault</a></h1>
+    <div class="topbar-meta">
+        <form method="post" action="/sync" class="sync-form">
+            <input type="hidden" name="next" value="/{{ repo.full_name }}?{{ repo.period.query_string }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn sync-btn">
+                <span class="spinner" aria-hidden="true"></span>
+                <span class="label">Sync Now</span>
+                <span class="label-loading">Syncing...</span>
+            </button>
+        </form>
+    </div>
+</header>
+
+{% if error %}
+<div class="banner err">{{ error }}</div>
+{% endif %}
+
+<section class="detail-head">
+    <div class="detail-title-row">
+        <div class="detail-title">
+            <a class="crumb" href="/">repos</a>
+            <span class="crumb-sep">/</span>
+            <h2>{{ repo.full_name }}</h2>
+            {% if repo.is_archived %}<span class="tag archived">archived</span>{% endif %}
+            {% if repo.is_fork %}<span class="tag fork">fork</span>{% endif %}
+        </div>
+        <a class="gh-link" href="{{ repo.github_url }}" target="_blank" rel="noopener">
+            View on GitHub
+            <span aria-hidden="true">&rarr;</span>
+        </a>
+    </div>
+    <div class="detail-meta-row">
+        <span class="badge stars" title="stars">&#9733; {{ repo.stargazers }}</span>
+        <span class="badge forks" title="forks">forks {{ repo.forks }}</span>
+        <span class="badge watchers" title="watchers">watchers {{ repo.watchers }}</span>
+        {% if repo.created_at %}
+        <span class="muted">created {{ repo.created_at.strftime("%Y-%m-%d") }}</span>
+        {% endif %}
+        {% if repo.default_branch %}
+        <span class="muted">default <code>{{ repo.default_branch }}</code></span>
+        {% endif %}
+    </div>
+    <div class="detail-totals">
+        <span class="views"><strong>{{ repo.total_views }}</strong> views</span>
+        <span class="muted">({{ repo.total_v_uniques }} unique)</span>
+        <span class="sep">|</span>
+        <span class="clones"><strong>{{ repo.total_clones }}</strong> clones</span>
+        <span class="muted">({{ repo.total_c_uniques }} unique)</span>
+        <span class="window">{{ repo.period.label }}</span>
+    </div>
+</section>
+
+<nav class="period-nav">
+    <span class="muted">period:</span>
+    <details class="period-menu">
+        <summary>{{ repo.period.label }}</summary>
+        <div class="period-panel">
+            <div class="period-presets">
+                {% for n in presets %}
+                <a class="period-item{% if repo.period.kind == 'days' and repo.period.days == n %} active{% endif %}" href="/{{ repo.full_name }}?days={{ n }}">Last {{ n }} days</a>
+                {% endfor %}
+                <a class="period-item{% if repo.period.kind == 'all' %} active{% endif %}" href="/{{ repo.full_name }}?range=all">All time</a>
+            </div>
+            <div class="period-divider"></div>
+            <form class="period-custom" method="get" action="/{{ repo.full_name }}">
+                <span class="period-custom-label">Custom range</span>
+                <label>from
+                    <input type="date" name="from" value="{{ repo.period.start.isoformat() }}" min="{{ repo.period.min_date.isoformat() }}" max="{{ repo.period.max_date.isoformat() }}">
+                </label>
+                <label>to
+                    <input type="date" name="to" value="{{ repo.period.end.isoformat() }}" min="{{ repo.period.min_date.isoformat() }}" max="{{ repo.period.max_date.isoformat() }}">
+                </label>
+                <button type="submit" class="btn">Apply</button>
+            </form>
+        </div>
+    </details>
+</nav>
+
+<section class="detail-grid">
+    <article class="chart-card">
+        <header class="chart-head">
+            <h3>Traffic - {{ repo.period.label }}</h3>
+            <div class="chart-legend">
+                <span class="legend-item"><span class="line-mark solid" data-series="views"></span>Views</span>
+                <span class="legend-item"><span class="line-mark dashed" data-series="v_uniques"></span>Unique views</span>
+                <span class="legend-item"><span class="line-mark solid" data-series="clones"></span>Clones</span>
+                <span class="legend-item"><span class="line-mark dashed" data-series="c_uniques"></span>Unique clones</span>
+            </div>
+        </header>
+        {% if repo.daily %}
+        <div class="chart-area" id="chart"></div>
+        <script type="application/json" id="chart-data">{{ chart_data | tojson }}</script>
+        <script src="{{ url_for('static', path='chart.js') }}"></script>
+        {% else %}
+        <p class="muted">No traffic data yet for this repo.</p>
+        {% endif %}
+    </article>
+
+    <aside class="status-card" aria-label="repository status">
+        <header class="status-head">
+            <h3>Repository status</h3>
+            {% if repo.status.synced_at %}
+            <span class="muted">synced {{ repo.status.synced_at | relative_time }}</span>
+            {% endif %}
+        </header>
+
+        <div class="status-row">
+            <span class="status-label">CI</span>
+            <div class="status-body">
+                {% if repo.status.ci_state == "none" %}
+                <span class="muted">no workflow runs</span>
+                {% else %}
+                <a class="ci-pill {{ repo.status.ci_pill_class }}" href="{{ repo.status.ci_run_url }}"
+                   target="_blank" rel="noopener">{{ repo.status.ci_label }}</a>
+                <span class="status-sub">
+                    {{ repo.status.ci_workflow or "workflow" }}
+                    {%- if repo.status.ci_branch %} ({{ repo.status.ci_branch }}){% endif %}
+                    {%- if repo.status.ci_run_at %} &middot; {{ repo.status.ci_run_at | relative_time }}{% endif %}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="status-row">
+            <span class="status-label">Release</span>
+            <div class="status-body">
+                {% if repo.status.release_name %}
+                <a class="version-badge" href="{{ repo.status.release_url }}"
+                   target="_blank" rel="noopener">{{ repo.status.release_name }}</a>
+                <span class="status-sub">
+                    {%- if repo.status.release_kind == "tag" %}git tag
+                    {%- elif repo.status.release_at %}released {{ repo.status.release_at.strftime("%Y-%m-%d") }}
+                    {%- else %}release{% endif %}
+                </span>
+                {% else %}
+                <span class="muted">no releases</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="status-row">
+            <span class="status-label">Pull requests</span>
+            <div class="status-body">
+                {% if repo.status.open_pr_count %}
+                <a class="pr-count" href="{{ repo.status.pulls_url }}" target="_blank"
+                   rel="noopener">{{ repo.status.open_pr_count }}{% if repo.status.open_pr_count >= 100 %}+{% endif %}</a>
+                <span class="status-sub">{{ repo.status.open_pr_count }} open pull request{{ "s" if repo.status.open_pr_count != 1 else "" }}</span>
+                {% else %}
+                <span class="muted">no open pull requests</span>
+                {% endif %}
+            </div>
+        </div>
+    </aside>
+</section>
+{% endblock %}

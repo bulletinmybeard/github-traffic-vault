@@ -1,0 +1,24 @@
+services:
+  github-traffic-vault:
+    build: .
+    container_name: github-traffic-vault
+    ports:
+      - "127.0.0.1:8800:8800"
+    volumes:
+      - ./github_traffic_vault:/app/github_traffic_vault
+      - ./data:/app/data
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_TRAFFIC_VAULT_SECRET_KEY: ${GITHUB_TRAFFIC_VAULT_SECRET_KEY:-}
+      GITHUB_TRAFFIC_VAULT_DB: /app/data/github-traffic-vault.db
+      GITHUB_TRAFFIC_VAULT_LOG: /app/data/github-traffic-vault.log
+    command:
+      [
+        "github-traffic-vault",
+        "serve",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8800",
+        "--reload",
+      ]
