@@ -60,6 +60,10 @@ def create_app(cfg: Config) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> RedirectResponse:
+        return RedirectResponse(url="/static/favicon.svg")
+
     @app.middleware("http")
     async def no_store_html(request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
