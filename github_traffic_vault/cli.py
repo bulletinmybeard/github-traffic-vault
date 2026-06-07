@@ -404,7 +404,7 @@ def _cmd_serve(cfg: Config, host: str, port: int, reload: bool) -> int:
             factory=True,
             reload_dirs=[str(github_traffic_vault.__path__[0])],
             proxy_headers=True,
-            forwarded_allow_ips="*",
+            forwarded_allow_ips=cfg.forwarded_allow_ips,
         )
     else:
         uvicorn.run(
@@ -412,6 +412,6 @@ def _cmd_serve(cfg: Config, host: str, port: int, reload: bool) -> int:
             host=host,
             port=port,
             proxy_headers=True,
-            forwarded_allow_ips="*",
+            forwarded_allow_ips=cfg.forwarded_allow_ips,
         )
     return 0

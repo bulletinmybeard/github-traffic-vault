@@ -19,4 +19,3 @@ data/
 scripts/
 Dockerfile
 docker-compose*.yml
-poetry.lock

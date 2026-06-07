@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -55,7 +55,7 @@ def create_app(cfg: Config) -> FastAPI:
         secret_key=cfg.secret_key,
         session_cookie="gtv_session",
         same_site="strict",
-        https_only=False,
+        https_only=cfg.secure_cookie,
     )
 
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
@@ -90,7 +90,7 @@ def create_app(cfg: Config) -> FastAPI:
         if not session_token or not secrets.compare_digest(csrf_token, session_token):
             return HTMLResponse("csrf token mismatch", status_code=403)
 
-        safe_next = next_url if next_url.startswith("/") else "/"
+        safe_next = next_url if next_url.startswith("/") and not next_url.startswith(("//", "/\\")) else "/"
         try:
             token = resolve_token(cfg.github_token_env)
         except TokenError as exc:
@@ -125,7 +125,7 @@ def create_app(cfg: Config) -> FastAPI:
         date_from: str | None = Query(default=None, alias="from"),
         date_to: str | None = Query(default=None, alias="to"),
         error: str | None = None,
-    ) -> HTMLResponse:
+    ) -> Response:
         csrf = _ensure_csrf(request)
         full_name = f"{owner}/{repo_name}"
         with session_scope(engine) as session:
@@ -138,7 +138,7 @@ def create_app(cfg: Config) -> FastAPI:
                 date_to=date_to,
             )
         if view is None:
-            return HTMLResponse(f"no such repo: {full_name}", status_code=404)
+            return PlainTextResponse(f"no such repo: {full_name}", status_code=404)
         chart_data = [
             {
                 "date": d.date.isoformat(),

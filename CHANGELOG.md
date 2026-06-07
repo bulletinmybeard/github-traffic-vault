@@ -19,8 +19,12 @@ keeping the full history GitHub drops after ~14 days.
 - `change_events` tracking to infer GitHub's traffic refresh cadence
 - ETag conditional requests to cut redundant API calls
 - Docker setup for local dev with hot-reload
+- Docker image built from the pinned `poetry.lock` (two-stage build)
+- Configurable session-cookie `Secure` flag (`GITHUB_TRAFFIC_VAULT_SECURE_COOKIE`) and trusted proxy IPs (`GITHUB_TRAFFIC_VAULT_FORWARDED_IPS`)
 
 ### Security
 
 - CSRF protection on the web UI's sync action (signed session + per-session token)
 - Chart data rendered as escaped JSON, so repo content can't inject script
+- Repo-detail 404 returns plain text, so `owner`/`repo` path segments can't inject HTML
+- Reject protocol-relative (`//host`) and backslash (`/\host`) `next` values on `/sync`

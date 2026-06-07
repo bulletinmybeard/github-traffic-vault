@@ -23,6 +23,13 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def _env_bool(key: str, default: bool) -> bool:
+    raw = os.environ.get(key)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class Config:
     db_path: Path
@@ -32,6 +39,8 @@ class Config:
     github_token_env: str
     secret_key: str
     secret_key_from_env: bool
+    secure_cookie: bool
+    forwarded_allow_ips: str
 
 
 def load() -> Config:
@@ -46,6 +55,8 @@ def load() -> Config:
         github_token_env="GITHUB_TOKEN",
         secret_key=env_secret or secrets.token_urlsafe(32),
         secret_key_from_env=bool(env_secret),
+        secure_cookie=_env_bool("GITHUB_TRAFFIC_VAULT_SECURE_COOKIE", False),
+        forwarded_allow_ips=_env("GITHUB_TRAFFIC_VAULT_FORWARDED_IPS", "127.0.0.1"),
     )
 
 
