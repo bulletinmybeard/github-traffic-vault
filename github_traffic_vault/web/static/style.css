@@ -16,6 +16,7 @@
     --border: #30363d;
     --border-soft: #21262d;
     color-scheme: dark;
+    --tiles-per-row: 5; /* index tile grid columns */
 }
 
 * { box-sizing: border-box; }
@@ -147,7 +148,7 @@ code { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(var(--tiles-per-row), 1fr);
     gap: 14px;
 }
 
