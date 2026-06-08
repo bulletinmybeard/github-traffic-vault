@@ -77,7 +77,7 @@ def create_app(cfg: Config) -> FastAPI:
         csrf = _ensure_csrf(request)
         with session_scope(engine) as session:
             sync = latest_sync(session)
-            tiles = repo_totals(session, days=days)
+            tiles = repo_totals(session, days=days, exclude_repos=cfg.exclude_repos)
         return templates.TemplateResponse(
             request,
             "index.html",

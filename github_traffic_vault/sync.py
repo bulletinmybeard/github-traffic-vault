@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 class SyncOptions:
     only_repos: list[str] | None = None
     dry_run: bool = False
+    exclude_repos: frozenset[str] | None = None
 
 
 def run_sync(
@@ -51,7 +52,7 @@ def run_sync(
     session.add(run)
     session.flush()
 
-    targets = _filter_repos(repos, opts.only_repos)
+    targets = _filter_repos(repos, opts.only_repos, exclude=opts.exclude_repos)
     run.repos_total = len(targets)
     session.flush()
 
@@ -87,11 +88,15 @@ def run_sync(
     return run
 
 
-def _filter_repos(repos: list[Repo], only: list[str] | None) -> list[Repo]:
-    if not only:
-        return repos
-    wanted = set(only)
-    return [r for r in repos if r.full_name in wanted or r.name in wanted]
+def _filter_repos(
+    repos: list[Repo], only: list[str] | None, exclude: frozenset[str] | None = None
+) -> list[Repo]:
+    if only:
+        wanted = set(only)
+        repos = [r for r in repos if r.full_name in wanted or r.name in wanted]
+    if exclude:
+        repos = [r for r in repos if r.name.lower() not in exclude]
+    return repos
 
 
 def _get_etag(session: Session, repo_id: int, endpoint: str) -> str | None:

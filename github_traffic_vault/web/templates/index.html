@@ -38,7 +38,7 @@
     <span class="window-label">window: last {{ days }} days</span>
 </div>
 
-<section class="grid">
+<section class="grid" style="--tiles-per-row: {{ tiles_per_row }}">
     {% for t in tiles %}
     <a class="tile" href="/{{ t.full_name }}?days={{ days }}">
         <div class="tile-slug-row">

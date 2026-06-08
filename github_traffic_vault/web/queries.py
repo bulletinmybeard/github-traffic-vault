@@ -189,7 +189,9 @@ def latest_sync(session: Session) -> SyncSummary | None:
     )
 
 
-def repo_totals(session: Session, days: int = 14) -> list[RepoTotal]:
+def repo_totals(
+    session: Session, days: int = 14, exclude_repos: frozenset[str] | None = None
+) -> list[RepoTotal]:
     """Per-repo totals over the last `days` days. Newest-first.
 
     Order is ``Repo.id`` ASC, which equals insertion order, which equals
@@ -202,6 +204,8 @@ def repo_totals(session: Session, days: int = 14) -> list[RepoTotal]:
     repos = session.scalars(
         select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
     ).all()
+    if exclude_repos:
+        repos = [r for r in repos if r.name.lower() not in exclude_repos]
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(select(DailyViews).where(DailyViews.date >= cutoff)).all()
@@ -253,9 +257,12 @@ def repo_detail(
     range_: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    exclude_repos: frozenset[str] | None = None,
 ) -> RepoView | None:
     """Single repo: daily breakdown over the resolved period, grouped by month."""
     repo = session.scalar(select(Repo).where(Repo.full_name == full_name))
+    if repo is not None and exclude_repos and repo.name.lower() in exclude_repos:
+        return None
     if repo is None:
         return None
 
@@ -329,7 +336,9 @@ def repo_detail(
     )
 
 
-def repo_views(session: Session, days: int = 14) -> list[RepoView]:
+def repo_views(
+    session: Session, days: int = 14, exclude_repos: frozenset[str] | None = None
+) -> list[RepoView]:
     """One RepoView per repo, with the last `days` days of traffic.
 
     Kept for the JSON API / backward compat. Index page uses
@@ -340,6 +349,8 @@ def repo_views(session: Session, days: int = 14) -> list[RepoView]:
     repos = session.scalars(
         select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
     ).all()
+    if exclude_repos:
+        repos = [r for r in repos if r.name.lower() not in exclude_repos]
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(select(DailyViews).where(DailyViews.date >= cutoff)).all()

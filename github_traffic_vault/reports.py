@@ -18,16 +18,17 @@ def export_rows(
     repo_full_name: str | None,
     kind: str,
     since: _date | None,
+    exclude_repos: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     """kind: views | clones | referrers | paths. `repo_full_name` None = all repos."""
     if kind == "views":
-        return _export_daily(session, DailyViews, repo_full_name, since)
+        return _export_daily(session, DailyViews, repo_full_name, since, exclude_repos)
     if kind == "clones":
-        return _export_daily(session, DailyClones, repo_full_name, since)
+        return _export_daily(session, DailyClones, repo_full_name, since, exclude_repos)
     if kind == "referrers":
-        return _export_referrers(session, repo_full_name)
+        return _export_referrers(session, repo_full_name, exclude_repos)
     if kind == "paths":
-        return _export_paths(session, repo_full_name)
+        return _export_paths(session, repo_full_name, exclude_repos)
     raise ValueError(f"unknown kind: {kind}")
 
 
@@ -36,12 +37,15 @@ def _export_daily(
     model: type[DailyViews] | type[DailyClones],
     repo_full_name: str | None,
     since: _date | None,
+    exclude_repos: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     q = select(model, Repo).join(Repo, Repo.id == model.repo_id)
     if repo_full_name is not None:
         q = q.where(Repo.full_name == repo_full_name)
     if since is not None:
         q = q.where(model.date >= since)
+    if exclude_repos:
+        q = q.where(func.lower(Repo.name).notin_(list(exclude_repos)))
     rows: list[dict[str, Any]] = []
     for row, repo in session.execute(q).all():
         rows.append(
@@ -58,10 +62,16 @@ def _export_daily(
     return rows
 
 
-def _export_referrers(session: Session, repo_full_name: str | None) -> list[dict[str, Any]]:
+def _export_referrers(
+    session: Session,
+    repo_full_name: str | None,
+    exclude_repos: frozenset[str] | None = None,
+) -> list[dict[str, Any]]:
     q = select(ReferrerSnapshot, Repo).join(Repo, Repo.id == ReferrerSnapshot.repo_id)
     if repo_full_name is not None:
         q = q.where(Repo.full_name == repo_full_name)
+    if exclude_repos:
+        q = q.where(func.lower(Repo.name).notin_(list(exclude_repos)))
     return [
         {
             "full_name": repo.full_name,
@@ -74,10 +84,16 @@ def _export_referrers(session: Session, repo_full_name: str | None) -> list[dict
     ]
 
 
-def _export_paths(session: Session, repo_full_name: str | None) -> list[dict[str, Any]]:
+def _export_paths(
+    session: Session,
+    repo_full_name: str | None,
+    exclude_repos: frozenset[str] | None = None,
+) -> list[dict[str, Any]]:
     q = select(PathSnapshot, Repo).join(Repo, Repo.id == PathSnapshot.repo_id)
     if repo_full_name is not None:
         q = q.where(Repo.full_name == repo_full_name)
+    if exclude_repos:
+        q = q.where(func.lower(Repo.name).notin_(list(exclude_repos)))
     return [
         {
             "full_name": repo.full_name,
@@ -104,7 +120,13 @@ def write_json(rows: list[dict[str, Any]], dest: IO[str]) -> None:
     dest.write("\n")
 
 
-def top_repos(session: Session, by: str, since: _date | None, limit: int) -> list[tuple[str, int, int]]:
+def top_repos(
+    session: Session,
+    by: str,
+    since: _date | None,
+    limit: int,
+    exclude_repos: frozenset[str] | None = None,
+) -> list[tuple[str, int, int]]:
     """Returns [(full_name, total_count, total_uniques)] sorted desc by count."""
     if by == "views":
         model: type[DailyViews] | type[DailyClones] = DailyViews
@@ -126,11 +148,16 @@ def top_repos(session: Session, by: str, since: _date | None, limit: int) -> lis
     )
     if since is not None:
         q = q.where(model.date >= since)
+    if exclude_repos:
+        q = q.where(func.lower(Repo.name).notin_(list(exclude_repos)))
     return [(r[0], int(r[1]), int(r[2])) for r in session.execute(q).all()]
 
 
 def top_repos_combined(
-    session: Session, since: _date | None, limit: int
+    session: Session,
+    since: _date | None,
+    limit: int,
+    exclude_repos: frozenset[str] | None = None,
 ) -> list[tuple[str, int, int, int, int]]:
     """Returns [(full_name, views, v_uniques, clones, c_uniques)] sorted desc by views."""
     v_q = select(
@@ -162,4 +189,6 @@ def top_repos_combined(
         .order_by(func.coalesce(v_sub.c.v_total, 0).desc())
         .limit(limit)
     )
+    if exclude_repos:
+        q = q.where(func.lower(Repo.name).notin_(list(exclude_repos)))
     return [(r[0], int(r[1]), int(r[2]), int(r[3]), int(r[4])) for r in session.execute(q).all()]

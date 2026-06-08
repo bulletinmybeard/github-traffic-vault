@@ -16,7 +16,6 @@
     --border: #30363d;
     --border-soft: #21262d;
     color-scheme: dark;
-    --tiles-per-row: 5; /* index tile grid columns */
 }
 
 * { box-sizing: border-box; }
