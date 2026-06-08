@@ -7,9 +7,8 @@ services:
     volumes:
       - ./github_traffic_vault:/app/github_traffic_vault
       - ./data:/app/data
+    env_file: .env
     environment:
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      GITHUB_TRAFFIC_VAULT_SECRET_KEY: ${GITHUB_TRAFFIC_VAULT_SECRET_KEY:-}
       GITHUB_TRAFFIC_VAULT_DB: /app/data/github-traffic-vault.db
       GITHUB_TRAFFIC_VAULT_LOG: /app/data/github-traffic-vault.log
     command:

@@ -22,6 +22,7 @@ from github_traffic_vault.db import init_schema, make_engine, session_scope
 from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_token
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
+from github_traffic_vault.timefmt import format_local
 from github_traffic_vault.web.queries import latest_sync, repo_detail, repo_totals, repo_views
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,14 @@ def create_app(cfg: Config) -> FastAPI:
     init_schema(engine)
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     templates.env.filters["relative_time"] = _relative_time
+
+    def _localdt(value: datetime | None, fmt: str = "%Y-%m-%d %H:%M") -> str:
+        """Format a stored UTC datetime in the configured display timezone."""
+        if value is None:
+            return ""
+        return format_local(value, cfg.display_tz, fmt)
+
+    templates.env.filters["localdt"] = _localdt
 
     app.state.cfg = cfg
     app.state.engine = engine

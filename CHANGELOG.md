@@ -5,6 +5,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add an option to exclude public repositories like profile or deprecated repositories from the sync via env var (comma-separated list of repository names)
+- Render timestamps in the web UI and CLI in a configurable display timezone via `GITHUB_TRAFFIC_VAULT_DISPLAY_TZ` (IANA name, defaults to UTC); storage and machine-readable output (JSON API, exports) stay UTC
+- Add `Release` GitHub workflow: on a `v*` tag (or manual dispatch) it builds the wheel + sdist, verifies the tag matches the package version, and creates a GitHub release with checksums and changelog notes
+
+### Changed
+
+- Outsource the `tiles per row` number from the StyleSheet to an env var which defaults to 5 and caps on 5. Every number above 5 will fall back to 5
+
+### Fixed
+
+- Dev `docker-compose.yml` forwarded only a fixed subset of env vars; switched to `env_file: .env` so all `GITHUB_TRAFFIC_VAULT_*` config (display tz, exclude repos, tiles per row) reaches the container
+
 ## [0.1.0] - 2026-06-07
 
 First release. Permanently archives GitHub traffic for public owned repos,

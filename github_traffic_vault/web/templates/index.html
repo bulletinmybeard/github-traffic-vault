@@ -7,7 +7,7 @@
         {% if sync %}
         <span class="last-sync">
             last sync:
-            <strong>{{ sync.finished_at.strftime("%Y-%m-%d %H:%M") if sync.finished_at else "in flight" }}</strong>
+            <strong>{{ (sync.finished_at | localdt) if sync.finished_at else "in flight" }}</strong>
             (run #{{ sync.id }})
             <span class="sep">|</span>
             ok={{ sync.repos_ok }}/{{ sync.repos_total }}

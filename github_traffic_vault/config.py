@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from dataclasses import dataclass
+from datetime import UTC, tzinfo
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+log = logging.getLogger(__name__)
 
 
 def _env(key: str, default: str) -> str:
@@ -37,6 +42,17 @@ def _env_set(key: str) -> frozenset[str]:
     return frozenset(name.strip().lower() for name in raw.split(",") if name.strip())
 
 
+def _env_tz(key: str, default: str = "UTC") -> tzinfo:
+    """Resolve an IANA tz name to a tzinfo. Falls back to UTC on anything
+    invalid or unavailable (e.g., tzdata missing in slim Docker images)."""
+    name = (os.environ.get(key) or default).strip() or default
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        log.warning("invalid/unavailable timezone %r in %s; using UTC", name, key)
+        return UTC
+
+
 @dataclass(frozen=True)
 class Config:
     db_path: Path
@@ -50,6 +66,7 @@ class Config:
     forwarded_allow_ips: str
     exclude_repos: frozenset[str]
     tiles_per_row: int
+    display_tz: tzinfo
 
 
 def load() -> Config:
@@ -68,6 +85,7 @@ def load() -> Config:
         forwarded_allow_ips=_env("GITHUB_TRAFFIC_VAULT_FORWARDED_IPS", "127.0.0.1"),
         exclude_repos=_env_set("GITHUB_TRAFFIC_VAULT_EXCLUDE_REPOS"),
         tiles_per_row=max(1, min(5, _env_int("GITHUB_TRAFFIC_VAULT_TILES_PER_ROW", 5))),
+        display_tz=_env_tz("GITHUB_TRAFFIC_VAULT_DISPLAY_TZ", "UTC"),
     )
 
 
