@@ -7,10 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-08
+
+### Added
+
+- Add index, detail, and date-range picker screenshots to the README, plus Poetry, Ruff, and mypy badges
+
 ### Changed
 
 - Simplify `Release` GitHub workflow: drop the build/artifact/checksum steps; the workflow now only creates a GitHub release with notes extracted from the matching `CHANGELOG.md` section
 - CI workflow: add `poetry check --lock`, venv caching via `actions/cache`, and `--sync` on `poetry install`
+
+### Fixed
+
+- Index tile grid pushed wide tiles past the right edge of the viewport on repos with large view/clone counts and long repository names. The grid now uses `minmax(0, 1fr)` so tiles stay in-row
 
 ## [0.2.0] - 2026-06-08
 
