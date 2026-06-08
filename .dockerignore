@@ -19,3 +19,4 @@ data/
 scripts/
 Dockerfile
 docker-compose*.yml
+docker-compose-demo.yml
