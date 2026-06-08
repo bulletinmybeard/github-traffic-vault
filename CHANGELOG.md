@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add an option to exclude public repositories like profile or deprecated repositories from the sync via env var (comma-separated list of repository names)
 - Render timestamps in the web UI and CLI in a configurable display timezone via `GITHUB_TRAFFIC_VAULT_DISPLAY_TZ` (IANA name, defaults to UTC); storage and machine-readable output (JSON API, exports) stay UTC
+- Add `Release` GitHub workflow: on a `v*` tag (or manual dispatch) it builds the wheel + sdist, verifies the tag matches the package version, and creates a GitHub release with checksums and changelog notes
 
 ### Changed
 
