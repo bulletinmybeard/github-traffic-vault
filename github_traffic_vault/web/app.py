@@ -81,7 +81,14 @@ def create_app(cfg: Config) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "index.html",
-            {"sync": sync, "tiles": tiles, "days": days, "error": error, "csrf_token": csrf},
+            {
+                "sync": sync,
+                "tiles": tiles,
+                "days": days,
+                "error": error,
+                "csrf_token": csrf,
+                "tiles_per_row": cfg.tiles_per_row,
+            },
         )
 
     @app.post("/sync")
@@ -103,9 +110,9 @@ def create_app(cfg: Config) -> FastAPI:
             return RedirectResponse(url=f"{safe_next}{sep}error={quote(str(exc), safe='')}", status_code=303)
 
         with GitHubClient(token, cfg.user_agent) as gh, session_scope(engine) as session:
-            results = discover_and_upsert(session, gh)
+            results = discover_and_upsert(session, gh, exclude_repos=cfg.exclude_repos)
             repos = [r.repo for r in results]
-            run_sync(session, gh, cfg, SyncOptions(), repos)
+            run_sync(session, gh, cfg, SyncOptions(exclude_repos=cfg.exclude_repos), repos)
 
         return RedirectResponse(url=safe_next, status_code=303)
 
@@ -114,7 +121,10 @@ def create_app(cfg: Config) -> FastAPI:
         with session_scope(engine) as session:
             payload: dict[str, Any] = {
                 "sync": _dc_or_none(latest_sync(session)),
-                "repos": [_repo_to_dict(rv) for rv in repo_views(session, days=days)],
+                "repos": [
+                    _repo_to_dict(rv)
+                    for rv in repo_views(session, days=days, exclude_repos=cfg.exclude_repos)
+                ],
                 "days": days,
             }
         return JSONResponse(payload)
@@ -140,6 +150,7 @@ def create_app(cfg: Config) -> FastAPI:
                 range_=period_range,
                 date_from=date_from,
                 date_to=date_to,
+                exclude_repos=cfg.exclude_repos,
             )
         if view is None:
             return PlainTextResponse(f"no such repo: {full_name}", status_code=404)
