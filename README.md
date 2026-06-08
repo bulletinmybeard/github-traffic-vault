@@ -1,8 +1,11 @@
 # GitHub Traffic Vault
 
 [![CI](https://github.com/bulletinmybeard/github-traffic-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/bulletinmybeard/github-traffic-vault/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Poetry](https://img.shields.io/badge/poetry-managed-blue.svg)](https://python-poetry.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Type checking: mypy](https://img.shields.io/badge/type%20checking-mypy-blue.svg)](https://github.com/python/mypy)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 GitHub only retains repository traffic data (views, clones, top referrers, top paths) for about 14 days. **GitHub Traffic Vault** permanently archives that data in SQLite for all of your public repos, so nothing ever gets lost.
 
