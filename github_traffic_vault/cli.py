@@ -11,7 +11,7 @@ import argparse
 import logging
 import sys
 from datetime import date as _date
-from datetime import datetime
+from datetime import datetime, tzinfo
 
 import uvicorn
 from chalkbox import Section, Spinner, Table, get_console
@@ -34,6 +34,7 @@ from github_traffic_vault.models import (
 from github_traffic_vault.reports import export_rows, top_repos, top_repos_combined, write_csv, write_json
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
+from github_traffic_vault.timefmt import format_local
 from github_traffic_vault.web.app import create_app
 
 log = logging.getLogger("github_traffic_vault.cli")
@@ -210,7 +211,11 @@ def _cmd_repos(cfg: Config) -> int:
                 row_styles="alternate",
             )
             for r in rows:
-                table.add_row(r.full_name, _fmt(r.last_synced_at), _fmt(r.last_traffic_change_at))
+                table.add_row(
+                    r.full_name,
+                    _fmt(r.last_synced_at, cfg.display_tz),
+                    _fmt(r.last_traffic_change_at, cfg.display_tz),
+                )
             section.add(table)
     return 0
 
@@ -331,8 +336,8 @@ def _resolve_repo(session: Session, repo_ref: str) -> Repo | None:
     return None
 
 
-def _fmt(dt: datetime | None) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M") if dt else "-"
+def _fmt(dt: datetime | None, tz: tzinfo) -> str:
+    return format_local(dt, tz) if dt else "-"
 
 
 def _cmd_export(

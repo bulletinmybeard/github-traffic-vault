@@ -39,7 +39,7 @@
         <span class="badge forks" title="forks">forks {{ repo.forks }}</span>
         <span class="badge watchers" title="watchers">watchers {{ repo.watchers }}</span>
         {% if repo.created_at %}
-        <span class="muted">created {{ repo.created_at.strftime("%Y-%m-%d") }}</span>
+        <span class="muted">created {{ repo.created_at | localdt('%Y-%m-%d') }}</span>
         {% endif %}
         {% if repo.default_branch %}
         <span class="muted">default <code>{{ repo.default_branch }}</code></span>
@@ -134,7 +134,7 @@
                    target="_blank" rel="noopener">{{ repo.status.release_name }}</a>
                 <span class="status-sub">
                     {%- if repo.status.release_kind == "tag" %}git tag
-                    {%- elif repo.status.release_at %}released {{ repo.status.release_at.strftime("%Y-%m-%d") }}
+                    {%- elif repo.status.release_at %}released {{ repo.status.release_at | localdt('%Y-%m-%d') }}
                     {%- else %}release{% endif %}
                 </span>
                 {% else %}
