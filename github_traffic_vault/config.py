@@ -30,6 +30,13 @@ def _env_bool(key: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_set(key: str) -> frozenset[str]:
+    raw = os.environ.get(key)
+    if not raw:
+        return frozenset()
+    return frozenset(name.strip().lower() for name in raw.split(",") if name.strip())
+
+
 @dataclass(frozen=True)
 class Config:
     db_path: Path
@@ -41,6 +48,8 @@ class Config:
     secret_key_from_env: bool
     secure_cookie: bool
     forwarded_allow_ips: str
+    exclude_repos: frozenset[str]
+    tiles_per_row: int
 
 
 def load() -> Config:
@@ -57,6 +66,8 @@ def load() -> Config:
         secret_key_from_env=bool(env_secret),
         secure_cookie=_env_bool("GITHUB_TRAFFIC_VAULT_SECURE_COOKIE", False),
         forwarded_allow_ips=_env("GITHUB_TRAFFIC_VAULT_FORWARDED_IPS", "127.0.0.1"),
+        exclude_repos=_env_set("GITHUB_TRAFFIC_VAULT_EXCLUDE_REPOS"),
+        tiles_per_row=max(1, min(5, _env_int("GITHUB_TRAFFIC_VAULT_TILES_PER_ROW", 5))),
     )
 
 

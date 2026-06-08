@@ -119,10 +119,13 @@ def _cmd_sync(cfg: Config, only: list[str] | None, dry_run: bool) -> int:
     engine = make_engine(cfg.db_path)
     init_schema(engine)
 
+    if cfg.exclude_repos:
+        log.info("Excluding repos: %s", ", ".join(sorted(cfg.exclude_repos)))
+
     console = get_console()
     with GitHubClient(token, cfg.user_agent) as gh, session_scope(engine) as session:
         with Spinner("Discovering repos...") as sp:
-            results = discover_and_upsert(session, gh)
+            results = discover_and_upsert(session, gh, exclude_repos=cfg.exclude_repos)
             repos = [r.repo for r in results]
 
             def _on_progress(repo: Repo, index: int, total: int) -> None:
@@ -132,7 +135,7 @@ def _cmd_sync(cfg: Config, only: list[str] | None, dry_run: bool) -> int:
                 session,
                 gh,
                 cfg,
-                SyncOptions(only_repos=only, dry_run=dry_run),
+                SyncOptions(only_repos=only, dry_run=dry_run, exclude_repos=cfg.exclude_repos),
                 repos,
                 on_progress=_on_progress,
             )
@@ -199,6 +202,8 @@ def _cmd_repos(cfg: Config) -> int:
     init_schema(engine)
     with session_scope(engine) as session:
         rows = session.scalars(select(Repo).order_by(Repo.full_name)).all()
+        if cfg.exclude_repos:
+            rows = [r for r in rows if r.name.lower() not in cfg.exclude_repos]
         with Section("Tracked repos", subtitle=f"{len(rows)} total") as section:
             table = Table(
                 headers=["full_name", "last_synced_at", "last_change_at"],
@@ -214,6 +219,9 @@ def _cmd_show(cfg: Config, repo_ref: str, since: _date | None) -> int:
     engine = make_engine(cfg.db_path)
     with session_scope(engine) as session:
         repo = _resolve_repo(session, repo_ref)
+        if repo is not None and cfg.exclude_repos and repo.name.lower() in cfg.exclude_repos:
+            print(f"repo excluded via config: {repo_ref}", file=sys.stderr)
+            return 2
         if repo is None:
             print(f"no such repo: {repo_ref}", file=sys.stderr)
             return 2
@@ -341,7 +349,7 @@ def _cmd_export(
         if repo_ref != "all" and full_name is None:
             print(f"no such repo: {repo_ref}", file=sys.stderr)
             return 2
-        rows = export_rows(session, full_name, kind, since)
+        rows = export_rows(session, full_name, kind, since, exclude_repos=cfg.exclude_repos)
 
     if output:
         with open(output, "w", encoding="utf-8") as fh:
@@ -362,7 +370,7 @@ def _cmd_top(cfg: Config, by: str | None, since: _date | None, limit: int) -> in
     with session_scope(engine) as session:
         subtitle = f"since {since}" if since else "last 14 days"
         if by is None:
-            combined = top_repos_combined(session, since, limit)
+            combined = top_repos_combined(session, since, limit, exclude_repos=cfg.exclude_repos)
             with Section(f"Top {limit} repos (views + clones)", subtitle=subtitle) as section:
                 table = Table(
                     headers=["full_name", "views", "v_uniq", "clones", "c_uniq"],
@@ -372,7 +380,7 @@ def _cmd_top(cfg: Config, by: str | None, since: _date | None, limit: int) -> in
                     table.add_row(full_name, str(v), str(vu), str(c), str(cu))
                 section.add(table)
         else:
-            ranked = top_repos(session, by, since, limit)
+            ranked = top_repos(session, by, since, limit, exclude_repos=cfg.exclude_repos)
             with Section(f"Top {limit} repos by {by}", subtitle=subtitle) as section:
                 table = Table(
                     headers=["full_name", "total", "uniques"],

@@ -23,10 +23,19 @@ class DiscoveredRepo:
 
 
 def discover_and_upsert(
-    session: Session, gh: GitHubClient, now: datetime | None = None
+    session: Session,
+    gh: GitHubClient,
+    exclude_repos: frozenset[str] | None = None,
+    now: datetime | None = None,
 ) -> list[DiscoveredRepo]:
     now = now or datetime.now(UTC)
     payloads = gh.list_owned_repos()
+    if exclude_repos:
+        before = len(payloads)
+        payloads = [p for p in payloads if p.get("name", "").lower() not in exclude_repos]
+        skipped = before - len(payloads)
+        if skipped:
+            log.info("Excluding %d repo(s) via config", skipped)
     results: list[DiscoveredRepo] = []
     for payload in payloads:
         result = _upsert_one(session, payload, now)
