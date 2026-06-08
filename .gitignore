@@ -23,3 +23,6 @@ data/
 # Remote deployment
 docker-compose.remote.yml
 scripts/deploy-remote.sh
+
+# Demo setup (for screenshots)
+docker-compose-demo.yml

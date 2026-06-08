@@ -6,6 +6,31 @@
 
 GitHub only retains repository traffic data (views, clones, top referrers, top paths) for about 14 days. **GitHub Traffic Vault** permanently archives that data in SQLite for all of your public repos, so nothing ever gets lost.
 
+<table>
+  <tr valign="top">
+    <td width="40%">
+      <a href=".github/assets/github-traffic-vault-index-demo.png">
+        <img width="100%" alt="Index page: every public repo as a tile with 14-day and today view/clone totals" src=".github/assets/github-traffic-vault-index-demo.png">
+      </a>
+    </td>
+    <td width="40%">
+      <a href=".github/assets/github-traffic-vault-detail-demo.png">
+        <img width="100%" alt="Detail page: per-repo daily views/clones chart with CI, release, and open-PR status" src=".github/assets/github-traffic-vault-detail-demo.png">
+      </a>
+    </td>
+    <td width="20%">
+      <a href=".github/assets/github-traffic-vault-date-picker.png">
+        <img width="100%" alt="Date-range picker popover: preset windows (7/14/30 days, all time) plus a custom from/to range" src=".github/assets/github-traffic-vault-date-picker.png">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><em>Index page: showing all synced public repositories</em></td>
+    <td align="center"><em>Detail page: per-repo history and status</em></td>
+    <td align="center"><em>Date-range picker</em></td>
+  </tr>
+</table>
+
 ## What it does
 
 - Discovers all public owned repos via the GitHub REST API
