@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-25
+
+### Added
+
+- Index page period selector with the same presets as the detail page: This month, Last 7/14 days, Last month, Last 2/3 months, All time, and a custom from/to range
+- `range=month` query param for calendar month-to-date on index, detail, and `/api/repos.json`
+- Home page title links back to `/`
+
+### Changed
+
+- Default traffic window on the index and detail pages is now **Last month** (rolling 30 days) instead of 14 days
+- `/api/repos.json` returns a `period` object (`start`, `end`, `kind`, `days`, `label`) instead of a top-level `days` field; the same query params still apply
+
 ## [0.3.0] - 2026-06-08
 
 ### Added

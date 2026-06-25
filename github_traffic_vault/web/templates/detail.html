@@ -55,31 +55,9 @@
     </div>
 </section>
 
-<nav class="period-nav">
-    <span class="muted">period:</span>
-    <details class="period-menu">
-        <summary>{{ repo.period.label }}</summary>
-        <div class="period-panel">
-            <div class="period-presets">
-                {% for n in presets %}
-                <a class="period-item{% if repo.period.kind == 'days' and repo.period.days == n %} active{% endif %}" href="/{{ repo.full_name }}?days={{ n }}">Last {{ n }} days</a>
-                {% endfor %}
-                <a class="period-item{% if repo.period.kind == 'all' %} active{% endif %}" href="/{{ repo.full_name }}?range=all">All time</a>
-            </div>
-            <div class="period-divider"></div>
-            <form class="period-custom" method="get" action="/{{ repo.full_name }}">
-                <span class="period-custom-label">Custom range</span>
-                <label>from
-                    <input type="date" name="from" value="{{ repo.period.start.isoformat() }}" min="{{ repo.period.min_date.isoformat() }}" max="{{ repo.period.max_date.isoformat() }}">
-                </label>
-                <label>to
-                    <input type="date" name="to" value="{{ repo.period.end.isoformat() }}" min="{{ repo.period.min_date.isoformat() }}" max="{{ repo.period.max_date.isoformat() }}">
-                </label>
-                <button type="submit" class="btn">Apply</button>
-            </form>
-        </div>
-    </details>
-</nav>
+{% with period=repo.period, base_path="/" ~ repo.full_name %}
+{% include "_period_nav.html" %}
+{% endwith %}
 
 <section class="detail-grid">
     <article class="chart-card">

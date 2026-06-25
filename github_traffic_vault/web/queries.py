@@ -25,9 +25,6 @@ _MONTH_NAMES = (
     "Dec",
 )
 
-_DEFAULT_DAYS = 14
-
-
 @dataclass
 class DayRow:
     date: date
@@ -120,7 +117,7 @@ class Period:
 
     start: date
     end: date
-    kind: str  # "days" | "all" | "custom"
+    kind: str  # "month" | "days" | "all" | "custom"
     days: int  # active preset day-count; 0 when kind != "days"
     label: str
     min_date: date
@@ -132,7 +129,45 @@ class Period:
             return f"from={self.start.isoformat()}&to={self.end.isoformat()}"
         if self.kind == "all":
             return "range=all"
+        if self.kind == "month":
+            return "range=month"
         return f"days={self.days}"
+
+    @property
+    def short_label(self) -> str:
+        """Compact label for index tiles (e.g., 'Jun', '30d')."""
+        if self.kind == "month":
+            return _MONTH_NAMES[self.end.month - 1]
+        if self.kind == "days":
+            return f"{self.days}d"
+        if self.kind == "all":
+            return "all"
+        return "range"
+
+
+@dataclass(frozen=True)
+class PeriodPreset:
+    """A selectable window in the period dropdown."""
+
+    label: str
+    query_string: str
+    kind: str  # "month" | "days"
+    days: int = 0
+
+    def matches(self, period: Period) -> bool:
+        if self.kind == "month":
+            return period.kind == "month"
+        return period.kind == "days" and period.days == self.days
+
+
+PERIOD_PRESETS: tuple[PeriodPreset, ...] = (
+    PeriodPreset("This month", "range=month", "month"),
+    PeriodPreset("Last 7 days", "days=7", "days", 7),
+    PeriodPreset("Last 14 days", "days=14", "days", 14),
+    PeriodPreset("Last month", "days=30", "days", 30),
+    PeriodPreset("Last 2 months", "days=60", "days", 60),
+    PeriodPreset("Last 3 months", "days=90", "days", 90),
+)
 
 
 @dataclass
@@ -190,16 +225,19 @@ def latest_sync(session: Session) -> SyncSummary | None:
 
 
 def repo_totals(
-    session: Session, days: int = 14, exclude_repos: frozenset[str] | None = None
+    session: Session,
+    *,
+    start: date,
+    end: date,
+    exclude_repos: frozenset[str] | None = None,
 ) -> list[RepoTotal]:
-    """Per-repo totals over the last `days` days. Newest-first.
+    """Per-repo totals over ``start``..``end`` inclusive. Newest-first.
 
     Order is ``Repo.id`` ASC, which equals insertion order, which equals
     GitHub's ``/user/repos?affiliation=owner`` default sort
     (``created`` desc): the most recently created repo lands first.
     """
     today = datetime.now(UTC).date()
-    cutoff = today - timedelta(days=days - 1)
 
     repos = session.scalars(
         select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
@@ -208,11 +246,15 @@ def repo_totals(
         repos = [r for r in repos if r.name.lower() not in exclude_repos]
     views = {
         (r.repo_id, r.date): r
-        for r in session.scalars(select(DailyViews).where(DailyViews.date >= cutoff)).all()
+        for r in session.scalars(
+            select(DailyViews).where(DailyViews.date >= start, DailyViews.date <= end)
+        ).all()
     }
     clones = {
         (r.repo_id, r.date): r
-        for r in session.scalars(select(DailyClones).where(DailyClones.date >= cutoff)).all()
+        for r in session.scalars(
+            select(DailyClones).where(DailyClones.date >= start, DailyClones.date <= end)
+        ).all()
     }
 
     out: list[RepoTotal] = []
@@ -253,7 +295,7 @@ def repo_detail(
     session: Session,
     full_name: str,
     *,
-    days: int = 14,
+    days: int | None = None,
     range_: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
@@ -337,15 +379,17 @@ def repo_detail(
 
 
 def repo_views(
-    session: Session, days: int = 14, exclude_repos: frozenset[str] | None = None
+    session: Session,
+    *,
+    start: date,
+    end: date,
+    exclude_repos: frozenset[str] | None = None,
 ) -> list[RepoView]:
-    """One RepoView per repo, with the last `days` days of traffic.
+    """One RepoView per repo, with traffic over ``start``..``end`` inclusive.
 
     Kept for the JSON API / backward compat. Index page uses
     `repo_totals` now.
     """
-    cutoff = datetime.now(UTC).date() - timedelta(days=days - 1)
-
     repos = session.scalars(
         select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
     ).all()
@@ -353,11 +397,15 @@ def repo_views(
         repos = [r for r in repos if r.name.lower() not in exclude_repos]
     views = {
         (r.repo_id, r.date): r
-        for r in session.scalars(select(DailyViews).where(DailyViews.date >= cutoff)).all()
+        for r in session.scalars(
+            select(DailyViews).where(DailyViews.date >= start, DailyViews.date <= end)
+        ).all()
     }
     clones = {
         (r.repo_id, r.date): r
-        for r in session.scalars(select(DailyClones).where(DailyClones.date >= cutoff)).all()
+        for r in session.scalars(
+            select(DailyClones).where(DailyClones.date >= start, DailyClones.date <= end)
+        ).all()
     }
 
     out: list[RepoView] = []
@@ -453,7 +501,7 @@ def _range_label(start: date, end: date) -> str:
 
 def resolve_period(
     *,
-    days: int,
+    days: int | None,
     range_: str | None,
     date_from: str | None,
     date_to: str | None,
@@ -462,8 +510,9 @@ def resolve_period(
 ) -> Period:
     """Resolve the request params into a concrete date range.
 
-    Precedence: a valid custom from/to range wins; then `range=all`;
-    otherwise the relative `days` window (default 14).
+    Precedence: a valid custom from/to range wins; then ``range=all``;
+    then ``range=month`` (calendar month-to-date); then a positive
+    ``days`` window; otherwise a rolling 30-day window (the default).
     """
     min_date = earliest or today
     start = _parse_date(date_from)
@@ -490,16 +539,37 @@ def resolve_period(
             min_date=min_date,
             max_date=today,
         )
-    d = days if days > 0 else _DEFAULT_DAYS
+    if range_ == "month":
+        month_start = today.replace(day=1)
+        return Period(
+            start=month_start,
+            end=today,
+            kind="month",
+            days=0,
+            label=_range_label(month_start, today),
+            min_date=min_date,
+            max_date=today,
+        )
+    d = 30 if days is None else (days if days > 0 else 30)
+    preset = next((p for p in PERIOD_PRESETS if p.kind == "days" and p.days == d), None)
+    label = preset.label if preset else f"Last {d} days"
     return Period(
         start=today - timedelta(days=d - 1),
         end=today,
         kind="days",
         days=d,
-        label=f"Last {d} days",
+        label=label,
         min_date=min_date,
         max_date=today,
     )
+
+
+def earliest_data_date_global(session: Session) -> date | None:
+    """Earliest archived traffic date across all repos."""
+    v = session.scalar(select(func.min(DailyViews.date)))
+    c = session.scalar(select(func.min(DailyClones.date)))
+    candidates = [d for d in (v, c) if d is not None]
+    return min(candidates) if candidates else None
 
 
 def earliest_data_date(session: Session, repo_id: int) -> date | None:

@@ -23,7 +23,15 @@ from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_to
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
 from github_traffic_vault.timefmt import format_local
-from github_traffic_vault.web.queries import latest_sync, repo_detail, repo_totals, repo_views
+from github_traffic_vault.web.queries import (
+    PERIOD_PRESETS,
+    earliest_data_date_global,
+    latest_sync,
+    repo_detail,
+    repo_totals,
+    repo_views,
+    resolve_period,
+)
 
 log = logging.getLogger(__name__)
 
@@ -82,18 +90,40 @@ def create_app(cfg: Config) -> FastAPI:
         return response
 
     @app.get("/", response_class=HTMLResponse)
-    def index(request: Request, days: int = 14, error: str | None = None) -> HTMLResponse:
+    def index(
+        request: Request,
+        days: int | None = None,
+        period_range: str | None = Query(default=None, alias="range"),
+        date_from: str | None = Query(default=None, alias="from"),
+        date_to: str | None = Query(default=None, alias="to"),
+        error: str | None = None,
+    ) -> HTMLResponse:
         csrf = _ensure_csrf(request)
+        today = datetime.now(UTC).date()
         with session_scope(engine) as session:
             sync = latest_sync(session)
-            tiles = repo_totals(session, days=days, exclude_repos=cfg.exclude_repos)
+            period = resolve_period(
+                days=days,
+                range_=period_range,
+                date_from=date_from,
+                date_to=date_to,
+                earliest=earliest_data_date_global(session),
+                today=today,
+            )
+            tiles = repo_totals(
+                session,
+                start=period.start,
+                end=period.end,
+                exclude_repos=cfg.exclude_repos,
+            )
         return templates.TemplateResponse(
             request,
             "index.html",
             {
                 "sync": sync,
                 "tiles": tiles,
-                "days": days,
+                "period": period,
+                "presets": PERIOD_PRESETS,
                 "error": error,
                 "csrf_token": csrf,
                 "tiles_per_row": cfg.tiles_per_row,
@@ -126,15 +156,40 @@ def create_app(cfg: Config) -> FastAPI:
         return RedirectResponse(url=safe_next, status_code=303)
 
     @app.get("/api/repos.json")
-    def api_repos(days: int = 14) -> JSONResponse:
+    def api_repos(
+        days: int | None = None,
+        period_range: str | None = Query(default=None, alias="range"),
+        date_from: str | None = Query(default=None, alias="from"),
+        date_to: str | None = Query(default=None, alias="to"),
+    ) -> JSONResponse:
+        today = datetime.now(UTC).date()
         with session_scope(engine) as session:
+            period = resolve_period(
+                days=days,
+                range_=period_range,
+                date_from=date_from,
+                date_to=date_to,
+                earliest=earliest_data_date_global(session),
+                today=today,
+            )
             payload: dict[str, Any] = {
                 "sync": _dc_or_none(latest_sync(session)),
                 "repos": [
                     _repo_to_dict(rv)
-                    for rv in repo_views(session, days=days, exclude_repos=cfg.exclude_repos)
+                    for rv in repo_views(
+                        session,
+                        start=period.start,
+                        end=period.end,
+                        exclude_repos=cfg.exclude_repos,
+                    )
                 ],
-                "days": days,
+                "period": {
+                    "start": period.start.isoformat(),
+                    "end": period.end.isoformat(),
+                    "kind": period.kind,
+                    "days": period.days,
+                    "label": period.label,
+                },
             }
         return JSONResponse(payload)
 
@@ -143,7 +198,7 @@ def create_app(cfg: Config) -> FastAPI:
         request: Request,
         owner: str,
         repo_name: str,
-        days: int = 14,
+        days: int | None = None,
         period_range: str | None = Query(default=None, alias="range"),
         date_from: str | None = Query(default=None, alias="from"),
         date_to: str | None = Query(default=None, alias="to"),
@@ -178,7 +233,7 @@ def create_app(cfg: Config) -> FastAPI:
             "detail.html",
             {
                 "repo": view,
-                "presets": (7, 14, 30, 90),
+                "presets": PERIOD_PRESETS,
                 "error": error,
                 "chart_data": chart_data,
                 "csrf_token": csrf,
