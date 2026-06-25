@@ -1,0 +1,25 @@
+<nav class="period-nav">
+    <span class="muted">Period:</span>
+    <details class="period-menu">
+        <summary>{{ period.label }}</summary>
+        <div class="period-panel">
+            <div class="period-presets">
+                {% for preset in presets %}
+                <a class="period-item{% if preset.matches(period) %} active{% endif %}" href="{{ base_path }}?{{ preset.query_string }}">{{ preset.label }}</a>
+                {% endfor %}
+                <a class="period-item{% if period.kind == 'all' %} active{% endif %}" href="{{ base_path }}?range=all">All time</a>
+            </div>
+            <div class="period-divider"></div>
+            <form class="period-custom" method="get" action="{{ base_path }}">
+                <span class="period-custom-label">Custom range</span>
+                <label>from
+                    <input type="date" name="from" value="{{ period.start.isoformat() }}" min="{{ period.min_date.isoformat() }}" max="{{ period.max_date.isoformat() }}">
+                </label>
+                <label>to
+                    <input type="date" name="to" value="{{ period.end.isoformat() }}" min="{{ period.min_date.isoformat() }}" max="{{ period.max_date.isoformat() }}">
+                </label>
+                <button type="submit" class="btn">Apply</button>
+            </form>
+        </div>
+    </details>
+</nav>

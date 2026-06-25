@@ -2,7 +2,7 @@
 
 {% block content %}
 <header class="topbar">
-    <h1>GitHub Traffic Vault</h1>
+    <h1><a href="/" class="back">GitHub Traffic Vault</a></h1>
     <div class="topbar-meta">
         {% if sync %}
         <span class="last-sync">
@@ -19,7 +19,7 @@
         <span class="last-sync muted">no sync yet</span>
         {% endif %}
         <form method="post" action="/sync" class="sync-form">
-            <input type="hidden" name="next" value="/?days={{ days }}">
+            <input type="hidden" name="next" value="/?{{ period.query_string }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn sync-btn">
                 <span class="spinner" aria-hidden="true"></span>
@@ -34,13 +34,13 @@
 <div class="banner err">{{ error }}</div>
 {% endif %}
 
-<div class="section-meta">
-    <span class="window-label">window: last {{ days }} days</span>
-</div>
+{% with base_path="/" %}
+{% include "_period_nav.html" %}
+{% endwith %}
 
 <section class="grid" style="--tiles-per-row: {{ tiles_per_row }}">
     {% for t in tiles %}
-    <a class="tile" href="/{{ t.full_name }}?days={{ days }}">
+    <a class="tile" href="/{{ t.full_name }}?{{ period.query_string }}">
         <div class="tile-slug-row">
             <div class="tile-slug">
                 <span class="owner">{{ t.owner }}/</span><span class="name">{{ t.name }}</span>
@@ -52,8 +52,8 @@
             </div>
         </div>
         <div class="tile-stats">
-            <div class="stat-row period-14d">
-                <span class="period-label">{{ days }}d</span>
+            <div class="stat-row period-window">
+                <span class="period-label">{{ period.short_label }}</span>
                 <span class="metric views">
                     <strong>{{ t.total_views }}</strong> view{{ '' if t.total_views == 1 else 's' }}
                     <span class="uniq">({{ t.total_v_uniques }}u)</span>

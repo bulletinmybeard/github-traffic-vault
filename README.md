@@ -13,7 +13,7 @@ GitHub only retains repository traffic data (views, clones, top referrers, top p
   <tr valign="top">
     <td width="40%">
       <a href=".github/assets/github-traffic-vault-index-demo.png">
-        <img width="100%" alt="Index page: every public repo as a tile with 14-day and today view/clone totals" src=".github/assets/github-traffic-vault-index-demo.png">
+        <img width="100%" alt="Index page: every public repo as a tile with window and today view/clone totals" src=".github/assets/github-traffic-vault-index-demo.png">
       </a>
     </td>
     <td width="40%">
@@ -23,34 +23,32 @@ GitHub only retains repository traffic data (views, clones, top referrers, top p
     </td>
     <td width="20%">
       <a href=".github/assets/github-traffic-vault-date-picker.png">
-        <img width="100%" alt="Date-range picker popover: preset windows (7/14/30 days, all time) plus a custom from/to range" src=".github/assets/github-traffic-vault-date-picker.png">
+        <img width="100%" alt="Date-range picker: presets plus a custom from/to range" src=".github/assets/github-traffic-vault-date-picker.png">
       </a>
     </td>
   </tr>
   <tr>
-    <td align="center"><em>Index page: showing all synced public repositories</em></td>
-    <td align="center"><em>Detail page: per-repo history and status</em></td>
-    <td align="center"><em>Date-range picker</em></td>
+    <td align="center"><em>All your repos at a glance</em></td>
+    <td align="center"><em>Per-repo history and status</em></td>
+    <td align="center"><em>Pick any time window</em></td>
   </tr>
 </table>
 
 ## What it does
 
-- Discovers all public owned repos via the GitHub REST API
-- Fetches the four traffic endpoints per public repo
-- Upserts daily series into SQLite and emits one row in `change_events` for every cell that changed since the previous sync
-- Tracks ETags per (repo, endpoint) so re-syncs cost nothing when nothing changed
-- Comes with a small FastAPI web UI for browsing the stored data with a one-click `Sync Now` button
+- **Archives traffic forever**: views, clones, top referrers, top paths — the stuff GitHub only keeps for ~14 days. Stored locally in SQLite, under your control
+- **Syncs your public repos**: discovers everything you own, pulls fresh numbers, and remembers the history. Hit **Sync Now** in the browser or schedule `sync` from the terminal
+- **Shows the big picture**: an index page with every repo as a card — totals for the period you pick, plus today. Defaults to the last 30 days
+- **Drills into one repo**: daily chart, month-by-month breakdown, and a quick status glance (CI, latest release, open PRs)
+- **Flexible date ranges**: same picker on index and detail — this month, last month, last N months, all time, or a custom from/to range
 
-## Setup
+You need a [GitHub personal access token](https://github.com/settings/tokens) with `repo` scope.
 
-Requires **Python 3.12** and **Poetry**. You need a GitHub Personal
-Access Token with `repo` scope. Two ways to provide it:
+**Option A — `.env` file** (works everywhere). Copy `.env.example` to `.env` and set `GITHUB_TOKEN`.
 
-- Set `GITHUB_TOKEN` in `.env` (works everywhere: Mac, Linux, CI). See `.env.example` for the template
-- On the Mac, leave `.env` empty and `github-traffic-vault` will fall back to `gh auth token` (requires the [GitHub CLI](https://cli.github.com/), logged in via `gh auth login`)
+**Option B — GitHub CLI** (Mac/Linux shortcut). If `gh auth login` already worked for you, leave `.env` empty and the app will borrow that token.
 
-The `gh` CLI is **only** used to fetch the token. All actual data fetching goes through the GitHub REST API directly via `httpx`.
+Requires Python 3.12 and [Poetry](https://python-poetry.org/).
 
 ```bash
 poetry install
@@ -95,43 +93,51 @@ A `Dockerfile` and a compose file for local dev with hot-reload.
 
 ```bash
 cp .env.example .env
-# fill GITHUB_TOKEN, or leave empty to let the container fall back to
-# `gh auth token` (gh is installed inside the image)
+# set GITHUB_TOKEN, or leave empty to use gh auth token inside the container
 
 docker compose up --build
-# UI at http://127.0.0.1:8800; source bind-mounted, uvicorn --reload
 ```
 
-Manual sync from another terminal:
+UI at [http://127.0.0.1:8800](http://127.0.0.1:8800). Source is bind-mounted with hot-reload, so edits to the code show up without rebuilding.
+
+Sync manually from another terminal:
 
 ```bash
 docker compose exec github-traffic-vault github-traffic-vault sync
 ```
 
-## Storage
+## Terminal commands
+
+The web UI covers most of what I need. If you prefer the command line:
+
+| Command | What it does |
+|---------|-------------|
+| `github-traffic-vault sync` | Discover repos and pull traffic data |
+| `github-traffic-vault repos` | List what's in the vault |
+| `github-traffic-vault show <owner/repo>` | Daily table for one repo |
+| `github-traffic-vault export` | Dump one repo or everything as CSV or JSON |
+| `github-traffic-vault top` | Rank repos by views or clones |
+| `github-traffic-vault serve` | Start the web UI |
+
+Run `github-traffic-vault --help` for flags (`--since`, `--only`, `--dry-run`, etc.).
+
+## Where the data lives
+
+Everything lands in a `data/` folder next to where you run the app:
 
 ```
 data/
-|-- github-traffic-vault.db    # SQLite (WAL mode)
-`-- github-traffic-vault.log   # rotating log
+├── github-traffic-vault.db
+└── github-traffic-vault.log
 ```
 
-Inspect with `sqlite3 data/github-traffic-vault.db` or another compatible SQLite client.
+Back up `github-traffic-vault.db` and you're good. Open it with any SQLite client if you're curious.
 
-## Schema
+## A few honest limits
 
-SQLite (WAL mode), nine tables: repos, the daily views/clones series, top
-referrers and paths, releases/tags, open PR counts, an `etags` table backing
-conditional requests, and a `change_events` table recording every value that
-changed between syncs (used to infer GitHub's refresh cadence).
-
-## Limitations
-
-- Single GitHub account
-- Public repos only (private repo traffic is meaningless and skipped at the API layer)
-- No tests in this iteration
-- ETag support on traffic endpoints isn't documented by GitHub. The `etags` table is harmless if a server ever stops honoring them
-- The web UI binds to `127.0.0.1` only with no auth. To reach it from another machine, tunnel via SSH (`ssh -L 8800:127.0.0.1:8800 host`) or put it behind a reverse proxy
+- One GitHub account, public repos only
+- The web UI listens on `127.0.0.1` with no login. Fine for local use
+- No test suite yet as it's a personal tool that still grows its legs
 
 ## License
 
