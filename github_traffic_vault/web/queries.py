@@ -25,6 +25,7 @@ _MONTH_NAMES = (
     "Dec",
 )
 
+
 @dataclass
 class DayRow:
     date: date
