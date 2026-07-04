@@ -22,9 +22,10 @@ from github_traffic_vault.db import init_schema, make_engine, session_scope
 from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_token
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
-from github_traffic_vault.timefmt import format_local
+from github_traffic_vault.timefmt import format_local, today_in_tz, traffic_today_utc
 from github_traffic_vault.web.queries import (
     PERIOD_PRESETS,
+    archive_span_global,
     earliest_data_date_global,
     latest_sync,
     repo_detail,
@@ -99,7 +100,7 @@ def create_app(cfg: Config) -> FastAPI:
         error: str | None = None,
     ) -> HTMLResponse:
         csrf = _ensure_csrf(request)
-        today = datetime.now(UTC).date()
+        calendar_today = today_in_tz(cfg.display_tz)
         with session_scope(engine) as session:
             sync = latest_sync(session)
             period = resolve_period(
@@ -108,12 +109,15 @@ def create_app(cfg: Config) -> FastAPI:
                 date_from=date_from,
                 date_to=date_to,
                 earliest=earliest_data_date_global(session),
-                today=today,
+                today=calendar_today,
             )
+            archive = archive_span_global(session)
             tiles = repo_totals(
                 session,
                 start=period.start,
                 end=period.end,
+                traffic_today=traffic_today_utc(),
+                open_end=period.open_end,
                 exclude_repos=cfg.exclude_repos,
             )
         return templates.TemplateResponse(
@@ -123,6 +127,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "sync": sync,
                 "tiles": tiles,
                 "period": period,
+                "archive": archive,
                 "presets": PERIOD_PRESETS,
                 "error": error,
                 "csrf_token": csrf,
@@ -162,7 +167,7 @@ def create_app(cfg: Config) -> FastAPI:
         date_from: str | None = Query(default=None, alias="from"),
         date_to: str | None = Query(default=None, alias="to"),
     ) -> JSONResponse:
-        today = datetime.now(UTC).date()
+        calendar_today = today_in_tz(cfg.display_tz)
         with session_scope(engine) as session:
             period = resolve_period(
                 days=days,
@@ -170,8 +175,9 @@ def create_app(cfg: Config) -> FastAPI:
                 date_from=date_from,
                 date_to=date_to,
                 earliest=earliest_data_date_global(session),
-                today=today,
+                today=calendar_today,
             )
+            archive = archive_span_global(session)
             payload: dict[str, Any] = {
                 "sync": _dc_or_none(latest_sync(session)),
                 "repos": [
@@ -180,9 +186,17 @@ def create_app(cfg: Config) -> FastAPI:
                         session,
                         start=period.start,
                         end=period.end,
+                        open_end=period.open_end,
                         exclude_repos=cfg.exclude_repos,
                     )
                 ],
+                "archive": {
+                    "earliest": archive.earliest.isoformat() if archive.earliest else None,
+                    "latest": archive.latest.isoformat() if archive.latest else None,
+                    "through": period.end.isoformat(),
+                    "label": archive.label,
+                    "range_label": archive.range_label(through=period.end),
+                },
                 "period": {
                     "start": period.start.isoformat(),
                     "end": period.end.isoformat(),
@@ -206,10 +220,12 @@ def create_app(cfg: Config) -> FastAPI:
     ) -> Response:
         csrf = _ensure_csrf(request)
         full_name = f"{owner}/{repo_name}"
+        calendar_today = today_in_tz(cfg.display_tz)
         with session_scope(engine) as session:
             view = repo_detail(
                 session,
                 full_name,
+                today=calendar_today,
                 days=days,
                 range_=period_range,
                 date_from=date_from,
@@ -233,6 +249,7 @@ def create_app(cfg: Config) -> FastAPI:
             "detail.html",
             {
                 "repo": view,
+                "period": view.period,
                 "presets": PERIOD_PRESETS,
                 "error": error,
                 "chart_data": chart_data,

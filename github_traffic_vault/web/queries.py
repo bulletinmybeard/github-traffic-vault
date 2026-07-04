@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -112,6 +112,28 @@ class RepoStatus:
         return f"https://github.com/{self.full_name}/pulls"
 
 
+@dataclass(frozen=True)
+class ArchiveSpan:
+    """Earliest/latest traffic dates stored in the vault."""
+
+    earliest: date | None
+    latest: date | None
+
+    @property
+    def label(self) -> str:
+        if self.earliest is None or self.latest is None:
+            return "no traffic archived yet"
+        if self.earliest == self.latest:
+            return self.earliest.isoformat()
+        return f"{self.earliest.isoformat()} - {self.latest.isoformat()}"
+
+    def range_label(self, *, through: date) -> str | None:
+        """Compact ``(start - through)`` label for the period picker."""
+        if self.earliest is None:
+            return None
+        return f"({self.earliest.isoformat()} - {through.isoformat()})"
+
+
 @dataclass
 class Period:
     """Resolved date range driving the detail-page chart + period selector."""
@@ -123,6 +145,7 @@ class Period:
     label: str
     min_date: date
     max_date: date
+    open_end: bool = False
 
     @property
     def query_string(self) -> str:
@@ -188,6 +211,7 @@ class RepoView:
     total_clones: int
     total_c_uniques: int
     status: RepoStatus
+    archive: ArchiveSpan | None = None
     period: Period | None = None
     daily: list[DayRow] = field(default_factory=list)  # ascending date order, for the chart
     days_by_month: list[tuple[str, list[DayRow]]] = field(default_factory=list)
@@ -225,11 +249,26 @@ def latest_sync(session: Session) -> SyncSummary | None:
     )
 
 
+def _daily_date_filters(
+    model: type[DailyViews] | type[DailyClones],
+    *,
+    start: date,
+    end: date,
+    open_end: bool,
+):
+    clauses = [model.date >= start]
+    if not open_end:
+        clauses.append(model.date <= end)
+    return clauses
+
+
 def repo_totals(
     session: Session,
     *,
     start: date,
     end: date,
+    traffic_today: date,
+    open_end: bool = False,
     exclude_repos: frozenset[str] | None = None,
 ) -> list[RepoTotal]:
     """Per-repo totals over ``start``..``end`` inclusive. Newest-first.
@@ -237,8 +276,10 @@ def repo_totals(
     Order is ``Repo.id`` ASC, which equals insertion order, which equals
     GitHub's ``/user/repos?affiliation=owner`` default sort
     (``created`` desc): the most recently created repo lands first.
+
+    The tile **today** row uses ``traffic_today`` (UTC calendar day per
+    GitHub's traffic buckets), queried separately from the period window.
     """
-    today = datetime.now(UTC).date()
 
     repos = session.scalars(
         select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
@@ -248,14 +289,22 @@ def repo_totals(
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyViews).where(DailyViews.date >= start, DailyViews.date <= end)
+            select(DailyViews).where(*_daily_date_filters(DailyViews, start=start, end=end, open_end=open_end))
         ).all()
     }
     clones = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyClones).where(DailyClones.date >= start, DailyClones.date <= end)
+            select(DailyClones).where(*_daily_date_filters(DailyClones, start=start, end=end, open_end=open_end))
         ).all()
+    }
+    today_views = {
+        r.repo_id: r
+        for r in session.scalars(select(DailyViews).where(DailyViews.date == traffic_today)).all()
+    }
+    today_clones = {
+        r.repo_id: r
+        for r in session.scalars(select(DailyClones).where(DailyClones.date == traffic_today)).all()
     }
 
     out: list[RepoTotal] = []
@@ -269,8 +318,8 @@ def repo_totals(
             if rid == repo.id:
                 totals[2] += c.count
                 totals[3] += c.uniques
-        today_v = views.get((repo.id, today))
-        today_c = clones.get((repo.id, today))
+        today_v = today_views.get(repo.id)
+        today_c = today_clones.get(repo.id)
         out.append(
             RepoTotal(
                 owner=repo.owner,
@@ -296,6 +345,7 @@ def repo_detail(
     session: Session,
     full_name: str,
     *,
+    today: date,
     days: int | None = None,
     range_: str | None = None,
     date_from: str | None = None,
@@ -315,28 +365,24 @@ def repo_detail(
         date_from=date_from,
         date_to=date_to,
         earliest=earliest_data_date(session, repo.id),
-        today=datetime.now(UTC).date(),
+        today=today,
     )
 
+    v_filters = [
+        DailyViews.repo_id == repo.id,
+        *_daily_date_filters(DailyViews, start=period.start, end=period.end, open_end=period.open_end),
+    ]
+    c_filters = [
+        DailyClones.repo_id == repo.id,
+        *_daily_date_filters(DailyClones, start=period.start, end=period.end, open_end=period.open_end),
+    ]
     v_rows = {
         r.date: r
-        for r in session.scalars(
-            select(DailyViews).where(
-                DailyViews.repo_id == repo.id,
-                DailyViews.date >= period.start,
-                DailyViews.date <= period.end,
-            )
-        ).all()
+        for r in session.scalars(select(DailyViews).where(*v_filters)).all()
     }
     c_rows = {
         r.date: r
-        for r in session.scalars(
-            select(DailyClones).where(
-                DailyClones.repo_id == repo.id,
-                DailyClones.date >= period.start,
-                DailyClones.date <= period.end,
-            )
-        ).all()
+        for r in session.scalars(select(DailyClones).where(*c_filters)).all()
     }
     # Ascending date order is what the chart wants; descending is what
     # the month-grouped table wants. Build asc once, reverse once.
@@ -373,6 +419,7 @@ def repo_detail(
         total_clones=totals[2],
         total_c_uniques=totals[3],
         status=_repo_status(repo),
+        archive=archive_span_for_repo(session, repo.id),
         period=period,
         daily=daily,
         days_by_month=_group_by_month(list(reversed(daily))),
@@ -384,6 +431,7 @@ def repo_views(
     *,
     start: date,
     end: date,
+    open_end: bool = False,
     exclude_repos: frozenset[str] | None = None,
 ) -> list[RepoView]:
     """One RepoView per repo, with traffic over ``start``..``end`` inclusive.
@@ -399,13 +447,13 @@ def repo_views(
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyViews).where(DailyViews.date >= start, DailyViews.date <= end)
+            select(DailyViews).where(*_daily_date_filters(DailyViews, start=start, end=end, open_end=open_end))
         ).all()
     }
     clones = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyClones).where(DailyClones.date >= start, DailyClones.date <= end)
+            select(DailyClones).where(*_daily_date_filters(DailyClones, start=start, end=end, open_end=open_end))
         ).all()
     }
 
@@ -514,6 +562,9 @@ def resolve_period(
     Precedence: a valid custom from/to range wins; then ``range=all``;
     then ``range=month`` (calendar month-to-date); then a positive
     ``days`` window; otherwise a rolling 30-day window (the default).
+
+    ``today`` should be the display-timezone calendar date (see
+    ``timefmt.today_in_tz``), not ``datetime.now(UTC).date()``.
     """
     min_date = earliest or today
     start = _parse_date(date_from)
@@ -539,6 +590,7 @@ def resolve_period(
             label="All time",
             min_date=min_date,
             max_date=today,
+            open_end=True,
         )
     if range_ == "month":
         month_start = today.replace(day=1)
@@ -571,6 +623,30 @@ def earliest_data_date_global(session: Session) -> date | None:
     c = session.scalar(select(func.min(DailyClones.date)))
     candidates = [d for d in (v, c) if d is not None]
     return min(candidates) if candidates else None
+
+
+def latest_data_date_global(session: Session) -> date | None:
+    """Latest archived traffic date across all repos."""
+    v = session.scalar(select(func.max(DailyViews.date)))
+    c = session.scalar(select(func.max(DailyClones.date)))
+    candidates = [d for d in (v, c) if d is not None]
+    return max(candidates) if candidates else None
+
+
+def archive_span_global(session: Session) -> ArchiveSpan:
+    return ArchiveSpan(earliest=earliest_data_date_global(session), latest=latest_data_date_global(session))
+
+
+def latest_data_date(session: Session, repo_id: int) -> date | None:
+    """Latest archived traffic date for a repo, across views and clones."""
+    v = session.scalar(select(func.max(DailyViews.date)).where(DailyViews.repo_id == repo_id))
+    c = session.scalar(select(func.max(DailyClones.date)).where(DailyClones.repo_id == repo_id))
+    candidates = [d for d in (v, c) if d is not None]
+    return max(candidates) if candidates else None
+
+
+def archive_span_for_repo(session: Session, repo_id: int) -> ArchiveSpan:
+    return ArchiveSpan(earliest=earliest_data_date(session, repo_id), latest=latest_data_date(session, repo_id))
 
 
 def earliest_data_date(session: Session, repo_id: int) -> date | None:

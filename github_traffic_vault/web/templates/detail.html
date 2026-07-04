@@ -55,7 +55,7 @@
     </div>
 </section>
 
-{% with period=repo.period, base_path="/" ~ repo.full_name %}
+{% with period=repo.period, base_path="/" ~ repo.full_name, archive=repo.archive %}
 {% include "_period_nav.html" %}
 {% endwith %}
 

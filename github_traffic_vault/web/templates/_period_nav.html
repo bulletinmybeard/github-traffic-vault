@@ -22,4 +22,7 @@
             </form>
         </div>
     </details>
+    {% if archive and archive.range_label(through=period.end) %}
+    <span class="muted">{{ archive.range_label(through=period.end) }}</span>
+    {% endif %}
 </nav>
