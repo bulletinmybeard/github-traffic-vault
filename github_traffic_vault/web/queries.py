@@ -289,13 +289,17 @@ def repo_totals(
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyViews).where(*_daily_date_filters(DailyViews, start=start, end=end, open_end=open_end))
+            select(DailyViews).where(
+                *_daily_date_filters(DailyViews, start=start, end=end, open_end=open_end)
+            )
         ).all()
     }
     clones = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyClones).where(*_daily_date_filters(DailyClones, start=start, end=end, open_end=open_end))
+            select(DailyClones).where(
+                *_daily_date_filters(DailyClones, start=start, end=end, open_end=open_end)
+            )
         ).all()
     }
     today_views = {
@@ -376,14 +380,8 @@ def repo_detail(
         DailyClones.repo_id == repo.id,
         *_daily_date_filters(DailyClones, start=period.start, end=period.end, open_end=period.open_end),
     ]
-    v_rows = {
-        r.date: r
-        for r in session.scalars(select(DailyViews).where(*v_filters)).all()
-    }
-    c_rows = {
-        r.date: r
-        for r in session.scalars(select(DailyClones).where(*c_filters)).all()
-    }
+    v_rows = {r.date: r for r in session.scalars(select(DailyViews).where(*v_filters)).all()}
+    c_rows = {r.date: r for r in session.scalars(select(DailyClones).where(*c_filters)).all()}
     # Ascending date order is what the chart wants; descending is what
     # the month-grouped table wants. Build asc once, reverse once.
     asc_dates = sorted(set(v_rows) | set(c_rows))
@@ -447,13 +445,17 @@ def repo_views(
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyViews).where(*_daily_date_filters(DailyViews, start=start, end=end, open_end=open_end))
+            select(DailyViews).where(
+                *_daily_date_filters(DailyViews, start=start, end=end, open_end=open_end)
+            )
         ).all()
     }
     clones = {
         (r.repo_id, r.date): r
         for r in session.scalars(
-            select(DailyClones).where(*_daily_date_filters(DailyClones, start=start, end=end, open_end=open_end))
+            select(DailyClones).where(
+                *_daily_date_filters(DailyClones, start=start, end=end, open_end=open_end)
+            )
         ).all()
     }
 
@@ -646,7 +648,9 @@ def latest_data_date(session: Session, repo_id: int) -> date | None:
 
 
 def archive_span_for_repo(session: Session, repo_id: int) -> ArchiveSpan:
-    return ArchiveSpan(earliest=earliest_data_date(session, repo_id), latest=latest_data_date(session, repo_id))
+    return ArchiveSpan(
+        earliest=earliest_data_date(session, repo_id), latest=latest_data_date(session, repo_id)
+    )
 
 
 def earliest_data_date(session: Session, repo_id: int) -> date | None:
