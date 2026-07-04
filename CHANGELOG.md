@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-05
+
+### Added
+
+- Vault archive date range inline next to the period picker on index and detail pages, e.g., `(2026-05-24 - 2026-07-04)` that runs through **today** in the display timezone
+- `/api/repos.json` adds an `archive` object (`earliest`, `latest`, `through`, `range_label`)
+- Close the period picker on Escape or an outside click (`period-menu.js`)
+
+### Fixed
+
+- Period boundaries use the `GITHUB_TRAFFIC_VAULT_DISPLAY_TZ` calendar date (`today_in_tz`) instead of UTC midnight
+- Tile **TODAY** row uses GitHub's UTC traffic day bucket (`traffic_today_utc`) and loads via a dedicated query, independent of the selected period window
+- **All time** totals include every archived row (`open_end` - no upper date cap at today)
+- Sync parses GitHub traffic timestamps as explicit UTC calendar days
+
 ## [0.4.0] - 2026-06-25
 
 ### Added

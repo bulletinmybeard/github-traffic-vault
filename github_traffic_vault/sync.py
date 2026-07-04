@@ -310,7 +310,11 @@ def _row_to_dict(row: ReferrerSnapshot | PathSnapshot, key_fields: tuple[str, ..
 
 
 def _parse_date(ts: str) -> _date:
-    return datetime.fromisoformat(ts.replace("Z", "+00:00")).date()
+    """GitHub traffic timestamps are UTC at the start of each day."""
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).date()
 
 
 def _parse_dt(value: str | None) -> datetime | None:
