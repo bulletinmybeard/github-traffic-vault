@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from github_traffic_vault.models import DailyClones, DailyViews, Repo, SyncRun
 
@@ -255,7 +256,7 @@ def _daily_date_filters(
     start: date,
     end: date,
     open_end: bool,
-):
+) -> list[ColumnElement[bool]]:
     clauses = [model.date >= start]
     if not open_end:
         clauses.append(model.date <= end)
