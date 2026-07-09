@@ -1,0 +1,29 @@
+<div class="index-toolbar">
+    <div class="toolbar-group">
+        <span class="toolbar-label">Sort</span>
+        {% for opt in sort_options %}
+        <a class="chip{% if sort == opt.key %} active{% endif %}"
+           href="/?{{ index_qs_base }}{% if index_qs_base %}&{% endif %}sort={{ opt.key }}{% if filter_ != 'public' %}&filter={{ filter_ }}{% endif %}">{{ opt.label }}</a>
+        {% endfor %}
+    </div>
+    <div class="toolbar-group filter-bar">
+        <span class="toolbar-label">Filter</span>
+        {% for opt in filter_options if opt.key != 'archived' %}
+        {% if opt.disabled %}
+        <span class="chip disabled" aria-disabled="true">{{ opt.label }}</span>
+        {% else %}
+        <a class="chip{% if filter_ == opt.key %} active{% endif %}"
+           href="/?{{ index_qs_base }}{% if index_qs_base %}&{% endif %}{% if sort != 'created' %}sort={{ sort }}&{% endif %}{% if opt.key != 'public' %}filter={{ opt.key }}{% endif %}">{{ opt.label }}</a>
+        {% endif %}
+        {% endfor %}
+        <span class="filter-spacer" aria-hidden="true"></span>
+        {% for opt in filter_options if opt.key == 'archived' %}
+        {% if opt.disabled %}
+        <span class="chip disabled" aria-disabled="true">{{ opt.label }}</span>
+        {% else %}
+        <a class="chip{% if filter_ == opt.key %} active{% endif %}"
+           href="/?{{ index_qs_base }}{% if index_qs_base %}&{% endif %}{% if sort != 'created' %}sort={{ sort }}&{% endif %}filter=archived">{{ opt.label }}</a>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>

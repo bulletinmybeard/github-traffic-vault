@@ -35,6 +35,7 @@ class Repo(Base):
     full_name: Mapped[str] = mapped_column(String, unique=True)
     is_fork: Mapped[bool] = mapped_column(Boolean, default=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False)
     stargazers: Mapped[int] = mapped_column(Integer, default=0)
     forks: Mapped[int] = mapped_column(Integer, default=0)
     watchers: Mapped[int] = mapped_column(Integer, default=0)

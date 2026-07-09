@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% include "_topbar.html" %}
+
+{% if saved %}
+<div class="banner">Settings saved to <code>config.yaml</code>. Effective immediately for this server; cron/CLI pick up on next run.</div>
+{% endif %}
+{% if error %}
+<div class="banner err">{{ error }}</div>
+{% endif %}
+
+<div class="settings-layout">
+    <nav class="settings-nav" aria-label="Settings">
+        <a href="/settings/general" class="settings-nav-item{% if active_section == 'general' %} active{% endif %}"
+           {% if active_section == 'general' %}aria-current="page"{% endif %}>General</a>
+        <a href="/settings/cards" class="settings-nav-item{% if active_section == 'cards' %} active{% endif %}"
+           {% if active_section == 'cards' %}aria-current="page"{% endif %}>Cards</a>
+        <a href="/settings/sync" class="settings-nav-item{% if active_section == 'sync' %} active{% endif %}"
+           {% if active_section == 'sync' %}aria-current="page"{% endif %}>Sync</a>
+    </nav>
+    <div class="settings-panel">
+        {% block settings_content %}{% endblock %}
+    </div>
+</div>
+{% endblock %}

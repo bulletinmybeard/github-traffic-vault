@@ -1,34 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<header class="topbar">
-    <h1><a href="/" class="back">GitHub Traffic Vault</a></h1>
-    <div class="topbar-meta">
-        {% if sync %}
-        <span class="last-sync">
-            last sync:
-            <strong>{{ (sync.finished_at | localdt) if sync.finished_at else "in flight" }}</strong>
-            <span title="run #{{ sync.id }}">(run #{{ sync.id | compact }})</span>
-            <span class="sep">|</span>
-            ok={{ sync.repos_ok }}/{{ sync.repos_total }}
-            {% if sync.repos_err %}<span class="err">err={{ sync.repos_err }}</span>{% endif %}
-            <span class="sep">|</span>
-            rate={{ sync.rate_remaining if sync.rate_remaining is not none else "?" }}
-        </span>
-        {% else %}
-        <span class="last-sync muted">no sync yet</span>
-        {% endif %}
-        <form method="post" action="/sync" class="sync-form">
-            <input type="hidden" name="next" value="/?{{ period.query_string }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn sync-btn">
-                <span class="spinner" aria-hidden="true"></span>
-                <span class="label">Sync Now</span>
-                <span class="label-loading">Syncing...</span>
-            </button>
-        </form>
-    </div>
-</header>
+{% include "_topbar.html" %}
 
 {% if error %}
 <div class="banner err">{{ error }}</div>
@@ -38,15 +11,20 @@
 {% include "_period_nav.html" %}
 {% endwith %}
 
+{% include "_index_toolbar.html" %}
+
+<p id="search-empty" class="search-empty muted" hidden></p>
+
 <section class="grid" style="--tiles-per-row: {{ tiles_per_row }}">
     {% for t in tiles %}
-    <a class="tile" href="/{{ t.full_name }}?{{ period.query_string }}">
+    <a class="tile" href="/{{ t.full_name }}?{{ index_qs }}" data-repo="{{ t.full_name }}">
         <div class="tile-slug-row">
             <div class="tile-slug">
                 <span class="owner">{{ t.owner }}/</span><span class="name">{{ t.name }}</span>
             </div>
             <div class="tile-tags">
                 {% if t.stargazers %}<span class="badge stars" title="stars">&#9733; {{ t.stargazers }}</span>{% endif %}
+                {% if t.is_private %}<span class="tag private">private</span>{% endif %}
                 {% if t.is_archived %}<span class="tag archived">archived</span>{% endif %}
                 {% if t.is_fork %}<span class="tag fork">fork</span>{% endif %}
             </div>
@@ -57,12 +35,15 @@
                 <span class="metric views">
                     <strong>{{ t.total_views }}</strong> view{{ '' if t.total_views == 1 else 's' }}
                     <span class="uniq">({{ t.total_v_uniques }}u)</span>
+                    {% with label=t.delta_views, css_class=t.delta_views_class %}{% include "_delta.html" %}{% endwith %}
                 </span>
                 <span class="metric clones">
                     <strong>{{ t.total_clones }}</strong> clone{{ '' if t.total_clones == 1 else 's' }}
                     <span class="uniq">({{ t.total_c_uniques }}u)</span>
+                    {% with label=t.delta_clones, css_class=t.delta_clones_class %}{% include "_delta.html" %}{% endwith %}
                 </span>
             </div>
+            {% if show_tile_today %}
             <div class="stat-row period-today {% if t.today_views == 0 and t.today_clones == 0 %}zero{% endif %}">
                 <span class="period-label">today</span>
                 <span class="metric views">
@@ -74,10 +55,41 @@
                     <span class="uniq">({{ t.today_c_uniques }}u)</span>
                 </span>
             </div>
+            {% endif %}
         </div>
+        {% if show_tile_sparklines %}
+        <div class="tile-sparklines{% if tile_sparklines_compact %} compact{% endif %}" aria-hidden="true">
+            {% if tile_sparklines_compact %}
+            <div class="sparkline-legend">
+                <span class="sparkline-legend-item views">
+                    <span class="line-mark solid" data-series="views"></span>views
+                </span>
+                <span class="sparkline-legend-item clones">
+                    <span class="line-mark solid" data-series="clones"></span>clones
+                </span>
+            </div>
+            <div class="sparkline-chart sparkline-chart-overlay"></div>
+            {% else %}
+            <div class="sparkline-row">
+                <span class="sparkline-label views">views</span>
+                <div class="sparkline-chart" data-series="views"></div>
+            </div>
+            <div class="sparkline-row">
+                <span class="sparkline-label clones">clones</span>
+                <div class="sparkline-chart" data-series="clones"></div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
     </a>
     {% else %}
     <p class="muted">No repos yet. Click <em>Sync Now</em> to fetch traffic data.</p>
     {% endfor %}
 </section>
+
+{% if sparkline_payload %}
+<script type="application/json" id="sparkline-data" data-compact="{{ '1' if tile_sparklines_compact else '0' }}">{{ sparkline_payload | tojson }}</script>
+<script src="/static/sparkline.js"></script>
+{% endif %}
+<script src="/static/search.js"></script>
 {% endblock %}

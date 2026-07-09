@@ -43,6 +43,12 @@ log = logging.getLogger("github_traffic_vault.cli")
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="github-traffic-vault", description="GitHub traffic archiver")
+    parser.add_argument(
+        "-c",
+        "--config",
+        default="config.yaml",
+        help="path to config.yaml (default: ./config.yaml)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging on stdout")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -79,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--reload", action="store_true", help="dev: auto-reload on file change")
 
     args = parser.parse_args(argv)
-    cfg = load()
+    cfg = load(config_path=args.config)
     ensure_data_dir(cfg)
     configure(cfg.log_path, verbose=args.verbose)
 
@@ -113,7 +119,7 @@ def _parse_since(s: str | None) -> _date | None:
 
 def _cmd_sync(cfg: Config, only: list[str] | None, dry_run: bool) -> int:
     try:
-        token = resolve_token(cfg.github_token_env)
+        token = resolve_token(cfg.github_token)
     except TokenError as exc:
         log.error("auth: %s", exc)
         return 1
@@ -127,7 +133,9 @@ def _cmd_sync(cfg: Config, only: list[str] | None, dry_run: bool) -> int:
     console = get_console()
     with GitHubClient(token, cfg.user_agent) as gh, session_scope(engine) as session:
         with Spinner("Discovering repos...") as sp:
-            results = discover_and_upsert(session, gh, exclude_repos=cfg.exclude_repos)
+            results = discover_and_upsert(
+                session, gh, exclude_repos=cfg.exclude_repos, include_private=cfg.include_private
+            )
             repos = [r.repo for r in results]
 
             def _on_progress(repo: Repo, index: int, total: int) -> None:

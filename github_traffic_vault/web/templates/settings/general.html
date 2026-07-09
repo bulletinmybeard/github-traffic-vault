@@ -1,0 +1,36 @@
+{% extends "settings/_layout.html" %}
+
+{% block settings_content %}
+<h2 class="settings-title">General</h2>
+<p class="settings-lead muted">Display and index layout. Values are stored in <code>config.yaml</code>.</p>
+
+<form method="post" action="/settings/general" class="settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label class="field">
+        <span class="field-label">Display timezone</span>
+        <span class="field-hint muted">IANA name, e.g. <code>Europe/Berlin</code> or <code>UTC</code></span>
+        <input type="text" name="display_tz" value="{{ form.display_tz }}" required>
+    </label>
+
+    <label class="field">
+        <span class="field-label">Tiles per row</span>
+        <span class="field-hint muted">1–5 repo cards per row on the index page</span>
+        <input type="number" name="tiles_per_row" value="{{ form.tiles_per_row }}" min="1" max="5" required>
+    </label>
+
+    <label class="field">
+        <span class="field-label">Sparkline history (days)</span>
+        <span class="field-hint muted">7–30 days of history for sparklines when the period is All time</span>
+        <input type="number" name="sparkline_days" value="{{ form.sparkline_days }}" min="7" max="30" required>
+    </label>
+
+    <label class="field">
+        <span class="field-label">Excluded repos</span>
+        <span class="field-hint muted">Comma-separated short repo names to skip during sync</span>
+        <textarea name="exclude_repos" rows="3">{{ form.exclude_repos }}</textarea>
+    </label>
+
+    <button type="submit" class="btn">Save changes</button>
+</form>
+{% endblock %}

@@ -16,11 +16,14 @@ Thumbs.db
 .vscode/
 .idea/
 
-# App data (DB, logs, env)
+# App data (DB, logs, config)
 data/
-.env
+config.yaml
 
 # Remote deployment
+.env
+deploy.env
+deploy.env.example
 docker-compose.remote.yml
 scripts/deploy-remote.sh
 

@@ -6,14 +6,13 @@ services:
       - "127.0.0.1:8800:8800"
     volumes:
       - ./github_traffic_vault:/app/github_traffic_vault
+      - ./config.yaml:/app/config.yaml
       - ./data:/app/data
-    env_file: .env
-    environment:
-      GITHUB_TRAFFIC_VAULT_DB: /app/data/github-traffic-vault.db
-      GITHUB_TRAFFIC_VAULT_LOG: /app/data/github-traffic-vault.log
     command:
       [
         "github-traffic-vault",
+        "--config",
+        "/app/config.yaml",
         "serve",
         "--host",
         "0.0.0.0",

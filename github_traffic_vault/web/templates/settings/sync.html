@@ -1,0 +1,21 @@
+{% extends "settings/_layout.html" %}
+
+{% block settings_content %}
+<h2 class="settings-title">Sync</h2>
+<p class="settings-lead muted">Discovery and data collection options. Values are stored in <code>config.yaml</code>.</p>
+
+<form method="post" action="/settings/sync" class="settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label class="field field-toggle">
+        <input type="checkbox" name="include_private" value="1"{% if form.include_private %} checked{% endif %}>
+        <span class="field-label">Include private repositories</span>
+    </label>
+    <p class="field-hint muted">
+        Requires <code>repo</code> scope on your PAT. Private repos show a lock badge.
+        Existing public data is unchanged; run <em>Sync Now</em> after enabling to discover private repos.
+    </p>
+
+    <button type="submit" class="btn">Save changes</button>
+</form>
+{% endblock %}
