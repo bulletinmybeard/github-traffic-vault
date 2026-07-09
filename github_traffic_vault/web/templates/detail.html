@@ -1,20 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<header class="topbar">
-    <h1><a href="/" class="back">GitHub Traffic Vault</a></h1>
-    <div class="topbar-meta">
-        <form method="post" action="/sync" class="sync-form">
-            <input type="hidden" name="next" value="/{{ repo.full_name }}?{{ repo.period.query_string }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn sync-btn">
-                <span class="spinner" aria-hidden="true"></span>
-                <span class="label">Sync Now</span>
-                <span class="label-loading">Syncing...</span>
-            </button>
-        </form>
-    </div>
-</header>
+{% include "_topbar.html" %}
 
 {% if error %}
 <div class="banner err">{{ error }}</div>
@@ -26,6 +13,7 @@
             <a class="crumb" href="/">repos</a>
             <span class="crumb-sep">/</span>
             <h2>{{ repo.full_name }}</h2>
+            {% if repo.is_private %}<span class="tag private">private</span>{% endif %}
             {% if repo.is_archived %}<span class="tag archived">archived</span>{% endif %}
             {% if repo.is_fork %}<span class="tag fork">fork</span>{% endif %}
         </div>
@@ -47,9 +35,11 @@
     </div>
     <div class="detail-totals">
         <span class="views"><strong>{{ repo.total_views }}</strong> views</span>
+        {% with label=repo.delta_views, css_class=repo.delta_views_class %}{% include "_delta.html" %}{% endwith %}
         <span class="muted">({{ repo.total_v_uniques }} unique)</span>
         <span class="sep">|</span>
         <span class="clones"><strong>{{ repo.total_clones }}</strong> clones</span>
+        {% with label=repo.delta_clones, css_class=repo.delta_clones_class %}{% include "_delta.html" %}{% endwith %}
         <span class="muted">({{ repo.total_c_uniques }} unique)</span>
         <span class="window">{{ repo.period.label }}</span>
     </div>
@@ -73,7 +63,7 @@
         {% if repo.daily %}
         <div class="chart-area" id="chart"></div>
         <script type="application/json" id="chart-data">{{ chart_data | tojson }}</script>
-        <script src="{{ url_for('static', path='chart.js') }}"></script>
+        <script src="/static/chart.js"></script>
         {% else %}
         <p class="muted">No traffic data yet for this repo.</p>
         {% endif %}
@@ -135,4 +125,87 @@
         </div>
     </aside>
 </section>
+
+<section class="referrers-paths-grid">
+    <article class="data-card">
+        <header class="data-card-head">
+            <h3>Top referrers</h3>
+            <p class="muted">Snapshot from last sync — GitHub retains ~14 days of referrer data.</p>
+        </header>
+        {% if repo.referrers %}
+        <table class="data-table">
+            <thead>
+                <tr><th>Referrer</th><th>Views</th><th>Uniques</th></tr>
+            </thead>
+            <tbody>
+                {% for r in repo.referrers %}
+                <tr>
+                    <td>{{ r.referrer }}</td>
+                    <td>{{ r.count }}</td>
+                    <td>{{ r.uniques }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="muted">No referrer data yet. Run <em>Sync Now</em>.</p>
+        {% endif %}
+    </article>
+
+    <article class="data-card">
+        <header class="data-card-head">
+            <h3>Top paths</h3>
+            <p class="muted">Snapshot from last sync — GitHub retains ~14 days of path data.</p>
+        </header>
+        {% if repo.paths %}
+        <table class="data-table">
+            <thead>
+                <tr><th>Path</th><th>Title</th><th>Views</th><th>Uniques</th></tr>
+            </thead>
+            <tbody>
+                {% for p in repo.paths %}
+                <tr>
+                    <td><code>{{ p.path }}</code></td>
+                    <td>{{ p.title or "" }}</td>
+                    <td>{{ p.count }}</td>
+                    <td>{{ p.uniques }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="muted">No path data yet. Run <em>Sync Now</em>.</p>
+        {% endif %}
+    </article>
+</section>
+
+<details class="revisions-card">
+    <summary>Data revisions</summary>
+    {% if repo.revisions %}
+    <table class="data-table revisions-table">
+        <thead>
+            <tr><th>When</th><th>Kind</th><th>Date</th><th>Change</th><th>Run</th></tr>
+        </thead>
+        <tbody>
+            {% for rev in repo.revisions %}
+            <tr>
+                <td>{{ rev.recorded_at | relative_time }}</td>
+                <td><span class="kind-badge {{ rev.kind }}">{{ rev.kind }}</span></td>
+                <td>{{ rev.traffic_date.isoformat() }}</td>
+                <td>
+                    {{ rev.prev_count }} &rarr; {{ rev.new_count }}
+                    ({% if rev.count_delta >= 0 %}+{% endif %}{{ rev.count_delta }})
+                    {% if rev.uniques_delta != 0 %}
+                    <span class="muted">uniques {{ rev.prev_uniques }} &rarr; {{ rev.new_uniques }}</span>
+                    {% endif %}
+                </td>
+                <td>#{{ rev.sync_run_id }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No revisions recorded (GitHub has not changed archived numbers for this repo).</p>
+    {% endif %}
+</details>
 {% endblock %}

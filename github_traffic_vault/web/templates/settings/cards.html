@@ -1,0 +1,38 @@
+{% extends "settings/_layout.html" %}
+
+{% block settings_content %}
+<h2 class="settings-title">Cards</h2>
+<p class="settings-lead muted">Index tile layout. Values are stored in <code>config.yaml</code>.</p>
+
+<form method="post" action="/settings/cards" class="settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label class="field field-toggle">
+        <input type="checkbox" name="show_tile_today" value="1"{% if form.show_tile_today %} checked{% endif %}>
+        <span class="field-label">Today stats</span>
+    </label>
+    <p class="field-hint muted">
+        Show a second row with views and clones for the current day on each repo card.
+    </p>
+
+    <label class="field field-toggle">
+        <input type="checkbox" name="show_tile_sparklines" value="1"{% if form.show_tile_sparklines %} checked{% endif %}>
+        <span class="field-label">Sparklines</span>
+    </label>
+    <p class="field-hint muted">
+        Daily views and clones trend charts below each card’s stats.
+        Bounded periods use the selected range; All time uses the history length under
+        <a href="/settings/general">General</a>.
+    </p>
+
+    <label class="field field-toggle">
+        <input type="checkbox" name="tile_sparklines_compact" value="1"{% if form.tile_sparklines_compact %} checked{% endif %}>
+        <span class="field-label">Compact sparklines</span>
+    </label>
+    <p class="field-hint muted">
+        Overlay views and clones on one chart (like the detail page) instead of two separate rows.
+    </p>
+
+    <button type="submit" class="btn">Save changes</button>
+</form>
+{% endblock %}

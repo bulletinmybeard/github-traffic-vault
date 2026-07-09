@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -53,15 +52,14 @@ class FetchResult:
     status: int
 
 
-def resolve_token(env_var: str = "GITHUB_TOKEN") -> str:
+def resolve_token(configured: str = "") -> str:
     """Env var wins; else shell out to `gh auth token`."""
-    val = os.environ.get(env_var)
-    if val:
-        return val.strip()
+    if configured.strip():
+        return configured.strip()
     try:
         out = subprocess.check_output(["gh", "auth", "token"], stderr=subprocess.DEVNULL, text=True)
     except FileNotFoundError as exc:
-        raise TokenError("`gh` CLI not installed and GITHUB_TOKEN not set") from exc
+        raise TokenError("`gh` CLI not installed and auth.github_token not set in config.yaml") from exc
     except subprocess.CalledProcessError as exc:
         raise TokenError("`gh auth token` failed; run `gh auth login`") from exc
     token = out.strip()
@@ -202,20 +200,19 @@ class GitHubClient:
         assert last_exc is not None
         raise GitHubError(f"giving up after {_RETRY_ATTEMPTS} attempts on /graphql: {last_exc}")
 
-    def list_owned_repos(self) -> list[dict[str, Any]]:
-        """Public repos owned by the authenticated user. Private repos are skipped."""
+    def list_owned_repos(self, *, include_private: bool = False) -> list[dict[str, Any]]:
+        """Owned repos for the authenticated user."""
         repos: list[dict[str, Any]] = []
         page = 1
         while True:
-            res = self._get(
-                "/user/repos",
-                params={
-                    "affiliation": "owner",
-                    "visibility": "public",
-                    "per_page": 100,
-                    "page": page,
-                },
-            )
+            params: dict[str, Any] = {
+                "affiliation": "owner",
+                "per_page": 100,
+                "page": page,
+            }
+            if not include_private:
+                params["visibility"] = "public"
+            res = self._get("/user/repos", params=params)
             if not isinstance(res.payload, list) or not res.payload:
                 break
             repos.extend(res.payload)

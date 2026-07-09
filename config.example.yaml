@@ -1,0 +1,44 @@
+# github-traffic-vault configuration
+# Copy to config.yaml and edit. config.yaml is gitignored.
+
+auth:
+  # GitHub PAT with `repo` scope. Leave empty to use `gh auth token` when available.
+  github_token: ""
+  # Session signing key for the web UI. Leave empty for a random per-process key (dev only).
+  # python -c 'import secrets; print(secrets.token_urlsafe(32))'
+  secret_key: ""
+
+display:
+  timezone: UTC
+  # Repo cards per row on the index page (1-5).
+  tiles_per_row: 5
+
+cards:
+  show_today: true
+  show_sparklines: true
+  # Overlay views + clones on one sparkline row when true.
+  sparklines_compact: false
+  # Days of sparkline history when the period is All time (7-30).
+  sparkline_days: 14
+
+sync:
+  include_private: false
+  # Short repo names to skip during sync, UI, and CLI.
+  exclude_repos: []
+  # exclude_repos: [my-fork, old-experiment]
+
+paths:
+  db: data/github-traffic-vault.db
+  log: data/github-traffic-vault.log
+  # Docker example:
+  # db: /app/data/github-traffic-vault.db
+  # log: /app/data/github-traffic-vault.log
+
+server:
+  rate_limit_floor: 100
+  user_agent: github-traffic-vault/0.1 (+local)
+  # Set true behind HTTPS (e.g. Traefik).
+  secure_cookie: false
+  # Trust X-Forwarded-Proto/For from a reverse proxy. Use "*" behind Traefik/Docker
+  # (required for https:// asset URLs). Use 127.0.0.1 for direct local http dev only.
+  forwarded_allow_ips: "*"

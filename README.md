@@ -1,5 +1,9 @@
 # GitHub Traffic Vault
 
+> **Breaking change (v0.6+):** All configuration lives in **`config.yaml`** only. No `.env` file and no `GITHUB_TRAFFIC_VAULT_*` environment variables.
+> Copy [`config.example.yaml`](config.example.yaml) to `config.yaml`, set `auth.github_token` (or rely on `gh auth token`), and for production set `auth.secret_key`.
+> The settings UI writes display/sync/card options to `config.yaml`. Override the file path with `--config` on the CLI.
+
 [![CI](https://github.com/bulletinmybeard/github-traffic-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/bulletinmybeard/github-traffic-vault/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Poetry](https://img.shields.io/badge/poetry-managed-blue.svg)](https://python-poetry.org/)
@@ -44,13 +48,13 @@ GitHub only retains repository traffic data (views, clones, top referrers, top p
 
 You need a [GitHub personal access token](https://github.com/settings/tokens) with `repo` scope.
 
-**Option A — `.env` file** (works everywhere). Copy `.env.example` to `.env` and set `GITHUB_TOKEN`.
-
-**Option B — GitHub CLI** (Mac/Linux shortcut). If `gh auth login` already worked for you, leave `.env` empty and the app will borrow that token.
+Copy `config.example.yaml` to `config.yaml` and set `auth.github_token`, or leave it empty and use `gh auth login` when the GitHub CLI is available.
 
 Requires Python 3.12 and [Poetry](https://python-poetry.org/).
 
 ```bash
+cp config.example.yaml config.yaml
+# edit auth.github_token (and auth.secret_key for prod web UI)
 poetry install
 poetry run github-traffic-vault sync
 ```
@@ -69,6 +73,7 @@ github-traffic-vault export <repo|all> [--format csv|json] [--kind views|clones|
 github-traffic-vault top [--by views|clones] [--since DATE] [--limit N]
 
 github-traffic-vault serve [--host 127.0.0.1] [--port 8800] [--reload]
+github-traffic-vault --config /path/to/config.yaml sync   # custom config file
 ```
 
 ## Web UI
@@ -79,7 +84,10 @@ poetry run github-traffic-vault serve
 ```
 
 The SPA, server-rendered (FastAPI + Jinja2). Each repo gets a card
-showing 14-day totals and a per-day breakdown grouped by month.
+with period totals, trend deltas, sparklines, sort/filter, and instant search.
+The detail page adds referrers, paths, and a revision log for when GitHub
+changes historical numbers. A gear button opens `/settings` to edit `config.yaml`
+(timezone, tiles per row, card layout, excluded repos, private-repo sync).
 The `Sync Now` button kicks off a real sync (blocks ~7s, then re-renders).
 The same data is available as JSON at `/api/repos.json`.
 
@@ -92,8 +100,9 @@ A `Dockerfile` and a compose file for local dev with hot-reload.
 ### Mac dev (hot-reload)
 
 ```bash
-cp .env.example .env
-# set GITHUB_TOKEN, or leave empty to use gh auth token inside the container
+cp config.example.yaml config.yaml
+# set auth.github_token, or leave empty to use gh auth token inside the container
+# set paths.db and paths.log to /app/data/... in config.yaml
 
 docker compose up --build
 ```
@@ -103,7 +112,7 @@ UI at [http://127.0.0.1:8800](http://127.0.0.1:8800). Source is bind-mounted wit
 Sync manually from another terminal:
 
 ```bash
-docker compose exec github-traffic-vault github-traffic-vault sync
+docker compose exec github-traffic-vault github-traffic-vault --config /app/config.yaml sync
 ```
 
 ## Terminal commands
@@ -119,7 +128,7 @@ The web UI covers most of what I need. If you prefer the command line:
 | `github-traffic-vault top` | Rank repos by views or clones |
 | `github-traffic-vault serve` | Start the web UI |
 
-Run `github-traffic-vault --help` for flags (`--since`, `--only`, `--dry-run`, etc.).
+Run `github-traffic-vault --help` for flags (`--config`, `--since`, `--only`, `--dry-run`, etc.).
 
 ## Where the data lives
 
@@ -135,8 +144,8 @@ Back up `github-traffic-vault.db` and you're good. Open it with any SQLite clien
 
 ## A few honest limits
 
-- One GitHub account, public repos only
-- The web UI listens on `127.0.0.1` with no login. Fine for local use
+- One GitHub account; public repos by default (enable private repos in Settings / `config.yaml`)
+- The web UI listens on `127.0.0.1` with no login. Fine for local use; settings write `config.yaml`
 - No test suite yet as it's a personal tool that still grows its legs
 
 ## License

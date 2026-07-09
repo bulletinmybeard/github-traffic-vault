@@ -9,7 +9,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from github_traffic_vault.models import DailyClones, DailyViews, Repo, SyncRun
+from github_traffic_vault.models import (
+    ChangeEvent,
+    DailyClones,
+    DailyViews,
+    PathSnapshot,
+    ReferrerSnapshot,
+    Repo,
+    SyncRun,
+)
 
 _MONTH_NAMES = (
     "Jan",
@@ -50,6 +58,7 @@ class RepoTotal:
     stargazers: int
     is_fork: bool
     is_archived: bool
+    is_private: bool
     total_views: int
     total_v_uniques: int
     total_clones: int
@@ -58,6 +67,44 @@ class RepoTotal:
     today_v_uniques: int
     today_clones: int
     today_c_uniques: int
+    delta_views: str | None = None
+    delta_clones: str | None = None
+    delta_views_class: str = ""
+    delta_clones_class: str = ""
+    delta_views_pct: int | None = None
+    delta_clones_pct: int | None = None
+    sparkline_views: list[int] = field(default_factory=list)
+    sparkline_clones: list[int] = field(default_factory=list)
+    created_at: datetime | None = None
+
+
+@dataclass
+class ReferrerRow:
+    referrer: str
+    count: int
+    uniques: int
+
+
+@dataclass
+class PathRow:
+    path: str
+    title: str | None
+    count: int
+    uniques: int
+
+
+@dataclass
+class RevisionRow:
+    recorded_at: datetime
+    kind: str
+    traffic_date: date
+    prev_count: int
+    new_count: int
+    count_delta: int
+    prev_uniques: int
+    new_uniques: int
+    uniques_delta: int
+    sync_run_id: int
 
 
 @dataclass
@@ -205,6 +252,7 @@ class RepoView:
     watchers: int
     is_fork: bool
     is_archived: bool
+    is_private: bool
     default_branch: str | None
     created_at: datetime | None
     total_views: int
@@ -212,10 +260,17 @@ class RepoView:
     total_clones: int
     total_c_uniques: int
     status: RepoStatus
+    delta_views: str | None = None
+    delta_clones: str | None = None
+    delta_views_class: str = ""
+    delta_clones_class: str = ""
     archive: ArchiveSpan | None = None
     period: Period | None = None
     daily: list[DayRow] = field(default_factory=list)  # ascending date order, for the chart
     days_by_month: list[tuple[str, list[DayRow]]] = field(default_factory=list)
+    referrers: list[ReferrerRow] = field(default_factory=list)
+    paths: list[PathRow] = field(default_factory=list)
+    revisions: list[RevisionRow] = field(default_factory=list)
 
     @property
     def github_url(self) -> str:
@@ -250,6 +305,138 @@ def latest_sync(session: Session) -> SyncSummary | None:
     )
 
 
+SORT_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("created", "Newest"),
+    ("clones", "Clones"),
+    ("views", "Views"),
+    ("stars", "Stars"),
+    ("name", "Name"),
+    ("delta_views", "View trend"),
+    ("delta_clones", "Clone trend"),
+)
+
+FILTER_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("public", "Public"),
+    ("private", "Private"),
+    ("archived", "Archived"),
+    ("fork", "Forks"),
+    ("all", "All"),
+)
+
+_FILTER_LABELS = dict(FILTER_OPTIONS)
+
+
+def filter_counts(
+    session: Session,
+    *,
+    exclude_repos: frozenset[str] | None = None,
+) -> dict[str, int]:
+    """Per-filter repo counts (vault inventory, not period traffic!)."""
+    repos = list(session.scalars(select(Repo)).all())
+    if exclude_repos:
+        repos = [r for r in repos if r.name.lower() not in exclude_repos]
+    return {
+        "all": len(repos),
+        "public": sum(1 for r in repos if not r.is_private),
+        "private": sum(1 for r in repos if r.is_private),
+        "archived": sum(1 for r in repos if r.is_archived),
+        "fork": sum(1 for r in repos if r.is_fork),
+    }
+
+
+def build_filter_options(counts: dict[str, int]) -> list[dict[str, str | int | bool]]:
+    """Filter chips in display order, with counts and disabled state."""
+    keys = ["public", "private", "fork", "all", "archived"]
+
+    options: list[dict[str, str | int | bool]] = []
+    for key in keys:
+        count = counts.get(key, 0)
+        disabled = key != "all" and count == 0
+        options.append(
+            {
+                "key": key,
+                "label": f"{_FILTER_LABELS[key]} ({count})",
+                "count": count,
+                "disabled": disabled,
+            }
+        )
+    return options
+
+
+def index_query_string(period: Period, sort: str = "created", filter_: str = "public") -> str:
+    parts = [period.query_string]
+    if sort != "created":
+        parts.append(f"sort={sort}")
+    if filter_ != "public":
+        parts.append(f"filter={filter_}")
+    return "&".join(parts)
+
+
+def prior_period_window(period: Period) -> tuple[date, date] | None:
+    if period.kind == "all":
+        return None
+    length = (period.end - period.start).days + 1
+    if period.kind == "month":
+        prior_month_last = period.start - timedelta(days=1)
+        prior_start = prior_month_last.replace(day=1)
+        prior_end = prior_start + timedelta(days=length - 1)
+        if prior_end > prior_month_last:
+            prior_end = prior_month_last
+        return prior_start, prior_end
+    prior_end = period.start - timedelta(days=1)
+    prior_start = prior_end - timedelta(days=length - 1)
+    return prior_start, prior_end
+
+
+def delta_label(current: int, prior: int, *, comparable: bool = True) -> str | None:
+    """Period-over-period badge for index/detail tiles."""
+    if not comparable:
+        return None
+    if current == 0:
+        return None
+    if prior == 0:
+        return "new"
+    pct = round((current - prior) / prior * 100)
+    if pct == 0:
+        return None
+    return f"{pct:+d}%"
+
+
+def delta_class(label: str | None) -> str:
+    if label is None:
+        return ""
+    if label == "new":
+        return "new"
+    if label.startswith("+"):
+        return "up"
+    if label.startswith("-"):
+        return "down"
+    return "up"
+
+
+def delta_pct(current: int, prior: int, *, comparable: bool = True) -> int | None:
+    if not comparable or current == 0 or prior == 0:
+        return None
+    return round((current - prior) / prior * 100)
+
+
+def _repo_period_totals(
+    repo_ids: set[int],
+    views: dict[tuple[int, date], DailyViews],
+    clones: dict[tuple[int, date], DailyClones],
+) -> dict[int, tuple[int, int, int, int]]:
+    out: dict[int, tuple[int, int, int, int]] = {rid: (0, 0, 0, 0) for rid in repo_ids}
+    for (rid, _d), v in views.items():
+        if rid in out:
+            t = out[rid]
+            out[rid] = (t[0] + v.count, t[1] + v.uniques, t[2], t[3])
+    for (rid, _d), c in clones.items():
+        if rid in out:
+            t = out[rid]
+            out[rid] = (t[0], t[1], t[2] + c.count, t[3] + c.uniques)
+    return out
+
+
 def _daily_date_filters(
     model: type[DailyViews] | type[DailyClones],
     *,
@@ -263,6 +450,33 @@ def _daily_date_filters(
     return clauses
 
 
+def _date_range(start: date, end: date) -> list[date]:
+    length = (end - start).days + 1
+    return [start + timedelta(days=i) for i in range(length)]
+
+
+def _sparkline_window(
+    period: Period | None,
+    *,
+    traffic_today: date,
+    sparkline_days: int,
+) -> tuple[date, date, bool]:
+    """Return sparkline start/end and whether to reuse the period traffic query."""
+    if period is not None and period.kind != "all":
+        return period.start, period.end, True
+    spark_end = traffic_today
+    spark_start = traffic_today - timedelta(days=sparkline_days - 1)
+    return spark_start, spark_end, False
+
+
+def _daily_count_series(
+    repo_id: int,
+    dates: list[date],
+    rows: dict[tuple[int, date], DailyViews] | dict[tuple[int, date], DailyClones],
+) -> list[int]:
+    return [rows[(repo_id, d)].count if (repo_id, d) in rows else 0 for d in dates]
+
+
 def repo_totals(
     session: Session,
     *,
@@ -271,22 +485,23 @@ def repo_totals(
     traffic_today: date,
     open_end: bool = False,
     exclude_repos: frozenset[str] | None = None,
+    sort: str = "created",
+    filter_: str = "public",
+    sparkline_days: int = 14,
+    period: Period | None = None,
+    include_today: bool = True,
+    include_sparklines: bool = True,
 ) -> list[RepoTotal]:
-    """Per-repo totals over ``start``..``end`` inclusive. Newest-first.
+    """Per-repo totals over ``start``..``end`` inclusive, with optional sort/filter."""
 
-    Order is ``Repo.id`` ASC, which equals insertion order, which equals
-    GitHub's ``/user/repos?affiliation=owner`` default sort
-    (``created`` desc): the most recently created repo lands first.
-
-    The tile **today** row uses ``traffic_today`` (UTC calendar day per
-    GitHub's traffic buckets), queried separately from the period window.
-    """
-
-    repos = session.scalars(
-        select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
-    ).all()
+    repos = list(
+        session.scalars(
+            select(Repo).order_by(Repo.created_at.is_(None), Repo.created_at.desc(), Repo.full_name)
+        ).all()
+    )
     if exclude_repos:
         repos = [r for r in repos if r.name.lower() not in exclude_repos]
+
     views = {
         (r.repo_id, r.date): r
         for r in session.scalars(
@@ -303,26 +518,85 @@ def repo_totals(
             )
         ).all()
     }
-    today_views = {
-        r.repo_id: r
-        for r in session.scalars(select(DailyViews).where(DailyViews.date == traffic_today)).all()
-    }
-    today_clones = {
-        r.repo_id: r
-        for r in session.scalars(select(DailyClones).where(DailyClones.date == traffic_today)).all()
-    }
+    prior_totals: dict[int, tuple[int, int, int, int]] = {}
+    deltas_comparable = False
+    if period is not None:
+        prior_win = prior_period_window(period)
+        if prior_win is not None:
+            deltas_comparable = True
+            p_start, p_end = prior_win
+            prior_views = {
+                (r.repo_id, r.date): r
+                for r in session.scalars(
+                    select(DailyViews).where(
+                        *_daily_date_filters(DailyViews, start=p_start, end=p_end, open_end=False)
+                    )
+                ).all()
+            }
+            prior_clones = {
+                (r.repo_id, r.date): r
+                for r in session.scalars(
+                    select(DailyClones).where(
+                        *_daily_date_filters(DailyClones, start=p_start, end=p_end, open_end=False)
+                    )
+                ).all()
+            }
+            prior_totals = _repo_period_totals({r.id for r in repos}, prior_views, prior_clones)
+
+    spark_dates: list[date] = []
+    reuse_period_sparklines = False
+    alltime_views: dict[tuple[int, date], DailyViews] = {}
+    alltime_clones: dict[tuple[int, date], DailyClones] = {}
+    if include_sparklines:
+        spark_start, spark_end, reuse_period_sparklines = _sparkline_window(
+            period, traffic_today=traffic_today, sparkline_days=sparkline_days
+        )
+        spark_dates = _date_range(spark_start, spark_end)
+        if not reuse_period_sparklines:
+            alltime_views = {
+                (r.repo_id, r.date): r
+                for r in session.scalars(
+                    select(DailyViews).where(DailyViews.date >= spark_start, DailyViews.date <= spark_end)
+                ).all()
+            }
+            alltime_clones = {
+                (r.repo_id, r.date): r
+                for r in session.scalars(
+                    select(DailyClones).where(DailyClones.date >= spark_start, DailyClones.date <= spark_end)
+                ).all()
+            }
+
+    today_views: dict[int, DailyViews] = {}
+    today_clones: dict[int, DailyClones] = {}
+    if include_today:
+        today_views = {
+            r.repo_id: r
+            for r in session.scalars(select(DailyViews).where(DailyViews.date == traffic_today)).all()
+        }
+        today_clones = {
+            r.repo_id: r
+            for r in session.scalars(select(DailyClones).where(DailyClones.date == traffic_today)).all()
+        }
+
+    repo_ids = {r.id for r in repos}
+    current_totals = _repo_period_totals(repo_ids, views, clones)
 
     out: list[RepoTotal] = []
     for repo in repos:
-        totals = [0, 0, 0, 0]  # views, v_uniques, clones, c_uniques
-        for (rid, _d), v in views.items():
-            if rid == repo.id:
-                totals[0] += v.count
-                totals[1] += v.uniques
-        for (rid, _d), c in clones.items():
-            if rid == repo.id:
-                totals[2] += c.count
-                totals[3] += c.uniques
+        totals = current_totals.get(repo.id, (0, 0, 0, 0))
+        prior = prior_totals.get(repo.id, (0, 0, 0, 0))
+        dv = delta_label(totals[0], prior[0], comparable=deltas_comparable)
+        dc = delta_label(totals[2], prior[2], comparable=deltas_comparable)
+        if include_sparklines:
+            if reuse_period_sparklines:
+                spark_views = _daily_count_series(repo.id, spark_dates, views)
+                spark_clones = _daily_count_series(repo.id, spark_dates, clones)
+            else:
+                spark_views = _daily_count_series(repo.id, spark_dates, alltime_views)
+                spark_clones = _daily_count_series(repo.id, spark_dates, alltime_clones)
+        else:
+            spark_views = []
+            spark_clones = []
         today_v = today_views.get(repo.id)
         today_c = today_clones.get(repo.id)
         out.append(
@@ -333,6 +607,7 @@ def repo_totals(
                 stargazers=repo.stargazers,
                 is_fork=repo.is_fork,
                 is_archived=repo.is_archived,
+                is_private=repo.is_private,
                 total_views=totals[0],
                 total_v_uniques=totals[1],
                 total_clones=totals[2],
@@ -341,8 +616,44 @@ def repo_totals(
                 today_v_uniques=today_v.uniques if today_v else 0,
                 today_clones=today_c.count if today_c else 0,
                 today_c_uniques=today_c.uniques if today_c else 0,
+                delta_views=dv,
+                delta_clones=dc,
+                delta_views_class=delta_class(dv),
+                delta_clones_class=delta_class(dc),
+                delta_views_pct=delta_pct(totals[0], prior[0], comparable=deltas_comparable),
+                delta_clones_pct=delta_pct(totals[2], prior[2], comparable=deltas_comparable),
+                sparkline_views=spark_views,
+                sparkline_clones=spark_clones,
+                created_at=repo.created_at,
             )
         )
+
+    if filter_ == "public":
+        out = [t for t in out if not t.is_private]
+    elif filter_ == "private":
+        out = [t for t in out if t.is_private]
+    elif filter_ == "archived":
+        out = [t for t in out if t.is_archived]
+    elif filter_ == "fork":
+        out = [t for t in out if t.is_fork]
+
+    def _sort_key(t: RepoTotal) -> tuple[str | int | float, ...]:
+        if sort == "views":
+            return (-t.total_views, t.full_name)
+        if sort == "clones":
+            return (-t.total_clones, t.full_name)
+        if sort == "stars":
+            return (-t.stargazers, t.full_name)
+        if sort == "created":
+            ts = t.created_at.timestamp() if t.created_at else 0.0
+            return (-ts, t.full_name)
+        if sort == "delta_views":
+            return (-(t.delta_views_pct if t.delta_views_pct is not None else -(10**9)), t.full_name)
+        if sort == "delta_clones":
+            return (-(t.delta_clones_pct if t.delta_clones_pct is not None else -(10**9)), t.full_name)
+        return (t.full_name,)
+
+    out.sort(key=_sort_key)
     return out
 
 
@@ -402,6 +713,30 @@ def repo_detail(
         totals[2] += c_count
         totals[3] += c_uniq
 
+    prior_win = prior_period_window(period)
+    deltas_comparable = prior_win is not None
+    prior_views_total = 0
+    prior_clones_total = 0
+    if prior_win is not None:
+        p_start, p_end = prior_win
+        prior_v = session.scalars(
+            select(DailyViews).where(
+                DailyViews.repo_id == repo.id,
+                *_daily_date_filters(DailyViews, start=p_start, end=p_end, open_end=False),
+            )
+        ).all()
+        prior_c = session.scalars(
+            select(DailyClones).where(
+                DailyClones.repo_id == repo.id,
+                *_daily_date_filters(DailyClones, start=p_start, end=p_end, open_end=False),
+            )
+        ).all()
+        prior_views_total = sum(r.count for r in prior_v)
+        prior_clones_total = sum(r.count for r in prior_c)
+
+    dv = delta_label(totals[0], prior_views_total, comparable=deltas_comparable)
+    dc = delta_label(totals[2], prior_clones_total, comparable=deltas_comparable)
+
     return RepoView(
         owner=repo.owner,
         name=repo.name,
@@ -411,17 +746,25 @@ def repo_detail(
         watchers=repo.watchers,
         is_fork=repo.is_fork,
         is_archived=repo.is_archived,
+        is_private=repo.is_private,
         default_branch=repo.default_branch,
         created_at=repo.created_at,
         total_views=totals[0],
         total_v_uniques=totals[1],
         total_clones=totals[2],
         total_c_uniques=totals[3],
+        delta_views=dv,
+        delta_clones=dc,
+        delta_views_class=delta_class(dv),
+        delta_clones_class=delta_class(dc),
         status=_repo_status(repo),
         archive=archive_span_for_repo(session, repo.id),
         period=period,
         daily=daily,
         days_by_month=_group_by_month(list(reversed(daily))),
+        referrers=latest_referrers(session, repo.id),
+        paths=latest_paths(session, repo.id),
+        revisions=revision_log(session, repo.id),
     )
 
 
@@ -491,6 +834,7 @@ def repo_views(
                 watchers=repo.watchers,
                 is_fork=repo.is_fork,
                 is_archived=repo.is_archived,
+                is_private=repo.is_private,
                 default_branch=repo.default_branch,
                 created_at=repo.created_at,
                 total_views=totals[0],
@@ -660,3 +1004,61 @@ def earliest_data_date(session: Session, repo_id: int) -> date | None:
     c = session.scalar(select(func.min(DailyClones.date)).where(DailyClones.repo_id == repo_id))
     candidates = [d for d in (v, c) if d is not None]
     return min(candidates) if candidates else None
+
+
+def latest_referrers(session: Session, repo_id: int) -> list[ReferrerRow]:
+    run_id = session.scalar(
+        select(ReferrerSnapshot.sync_run_id)
+        .where(ReferrerSnapshot.repo_id == repo_id)
+        .order_by(ReferrerSnapshot.sync_run_id.desc())
+        .limit(1)
+    )
+    if run_id is None:
+        return []
+    rows = session.scalars(
+        select(ReferrerSnapshot)
+        .where(ReferrerSnapshot.repo_id == repo_id, ReferrerSnapshot.sync_run_id == run_id)
+        .order_by(ReferrerSnapshot.count.desc())
+    ).all()
+    return [ReferrerRow(referrer=r.referrer, count=r.count, uniques=r.uniques) for r in rows]
+
+
+def latest_paths(session: Session, repo_id: int) -> list[PathRow]:
+    run_id = session.scalar(
+        select(PathSnapshot.sync_run_id)
+        .where(PathSnapshot.repo_id == repo_id)
+        .order_by(PathSnapshot.sync_run_id.desc())
+        .limit(1)
+    )
+    if run_id is None:
+        return []
+    rows = session.scalars(
+        select(PathSnapshot)
+        .where(PathSnapshot.repo_id == repo_id, PathSnapshot.sync_run_id == run_id)
+        .order_by(PathSnapshot.count.desc())
+    ).all()
+    return [PathRow(path=r.path, title=r.title, count=r.count, uniques=r.uniques) for r in rows]
+
+
+def revision_log(session: Session, repo_id: int, *, limit: int = 50) -> list[RevisionRow]:
+    rows = session.scalars(
+        select(ChangeEvent)
+        .where(ChangeEvent.repo_id == repo_id, ChangeEvent.prev_count.is_not(None))
+        .order_by(ChangeEvent.recorded_at.desc(), ChangeEvent.date.desc())
+        .limit(limit)
+    ).all()
+    return [
+        RevisionRow(
+            recorded_at=r.recorded_at,
+            kind=r.kind,
+            traffic_date=r.date,
+            prev_count=r.prev_count or 0,
+            new_count=r.new_count,
+            count_delta=r.count_delta,
+            prev_uniques=r.prev_uniques or 0,
+            new_uniques=r.new_uniques,
+            uniques_delta=r.uniques_delta,
+            sync_run_id=r.sync_run_id,
+        )
+        for r in rows
+    ]

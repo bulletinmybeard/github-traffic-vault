@@ -26,10 +26,11 @@ def discover_and_upsert(
     session: Session,
     gh: GitHubClient,
     exclude_repos: frozenset[str] | None = None,
+    include_private: bool = False,
     now: datetime | None = None,
 ) -> list[DiscoveredRepo]:
     now = now or datetime.now(UTC)
-    payloads = gh.list_owned_repos()
+    payloads = gh.list_owned_repos(include_private=include_private)
     if exclude_repos:
         before = len(payloads)
         payloads = [p for p in payloads if p.get("name", "").lower() not in exclude_repos]
@@ -53,6 +54,7 @@ def _upsert_one(session: Session, payload: dict[str, Any], now: datetime) -> Dis
     name = payload["name"]
     is_fork = bool(payload.get("fork", False))
     is_archived = bool(payload.get("archived", False))
+    is_private = bool(payload.get("private", False))
     stargazers = int(payload.get("stargazers_count", 0))
     forks = int(payload.get("forks_count", 0))
     watchers = int(payload.get("watchers_count", 0))
@@ -66,6 +68,7 @@ def _upsert_one(session: Session, payload: dict[str, Any], now: datetime) -> Dis
             full_name=full_name,
             is_fork=is_fork,
             is_archived=is_archived,
+            is_private=is_private,
             stargazers=stargazers,
             forks=forks,
             watchers=watchers,
@@ -81,6 +84,7 @@ def _upsert_one(session: Session, payload: dict[str, Any], now: datetime) -> Dis
     existing.name = name
     existing.is_fork = is_fork
     existing.is_archived = is_archived
+    existing.is_private = is_private
     existing.stargazers = stargazers
     existing.forks = forks
     existing.watchers = watchers
