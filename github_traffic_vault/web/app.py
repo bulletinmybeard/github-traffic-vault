@@ -20,6 +20,7 @@ from github_traffic_vault.config import Config
 from github_traffic_vault.config import load as load_config
 from github_traffic_vault.db import init_schema, make_engine, session_scope
 from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_token
+from github_traffic_vault.numfmt import compact_number
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
 from github_traffic_vault.timefmt import format_local, today_in_tz, traffic_today_utc
@@ -63,6 +64,7 @@ def create_app(cfg: Config) -> FastAPI:
         return format_local(value, cfg.display_tz, fmt)
 
     templates.env.filters["localdt"] = _localdt
+    templates.env.filters["compact"] = compact_number
 
     app.state.cfg = cfg
     app.state.engine = engine

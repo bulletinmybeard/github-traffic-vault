@@ -23,6 +23,7 @@ from github_traffic_vault.config import Config, ensure_data_dir, load
 from github_traffic_vault.db import init_schema, make_engine, session_scope
 from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_token
 from github_traffic_vault.logging_setup import configure
+from github_traffic_vault.numfmt import compact_number
 from github_traffic_vault.models import (
     DailyClones,
     DailyViews,
@@ -154,7 +155,7 @@ def _cmd_sync(cfg: Config, only: list[str] | None, dry_run: bool) -> int:
         ).all()
 
         duration = (run.finished_at - run.started_at).total_seconds() if run.finished_at else 0.0
-        subtitle = f"run #{run.id} - {len(rows)} repos in {duration:.1f}s"
+        subtitle = f"run #{compact_number(run.id)} - {len(rows)} repos in {duration:.1f}s"
         footer = f"ok={run.repos_ok}  err={run.repos_err}  rate_remaining={run.rate_remaining}"
 
         with Section("Sync", subtitle=subtitle, footer=footer) as section:
