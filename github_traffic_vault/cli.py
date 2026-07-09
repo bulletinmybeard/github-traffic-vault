@@ -23,7 +23,6 @@ from github_traffic_vault.config import Config, ensure_data_dir, load
 from github_traffic_vault.db import init_schema, make_engine, session_scope
 from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_token
 from github_traffic_vault.logging_setup import configure
-from github_traffic_vault.numfmt import compact_number
 from github_traffic_vault.models import (
     DailyClones,
     DailyViews,
@@ -32,6 +31,7 @@ from github_traffic_vault.models import (
     Repo,
     RepoSync,
 )
+from github_traffic_vault.numfmt import compact_number
 from github_traffic_vault.reports import export_rows, top_repos, top_repos_combined, write_csv, write_json
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
