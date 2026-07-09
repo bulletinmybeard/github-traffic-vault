@@ -31,6 +31,7 @@ from github_traffic_vault.models import (
     Repo,
     RepoSync,
 )
+from github_traffic_vault.numfmt import compact_number
 from github_traffic_vault.reports import export_rows, top_repos, top_repos_combined, write_csv, write_json
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
@@ -154,7 +155,7 @@ def _cmd_sync(cfg: Config, only: list[str] | None, dry_run: bool) -> int:
         ).all()
 
         duration = (run.finished_at - run.started_at).total_seconds() if run.finished_at else 0.0
-        subtitle = f"run #{run.id} - {len(rows)} repos in {duration:.1f}s"
+        subtitle = f"run #{compact_number(run.id)} - {len(rows)} repos in {duration:.1f}s"
         footer = f"ok={run.repos_ok}  err={run.repos_err}  rate_remaining={run.rate_remaining}"
 
         with Section("Sync", subtitle=subtitle, footer=footer) as section:

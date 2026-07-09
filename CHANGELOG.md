@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Helper functions to format sync run integers for the UI, abbreviating from 1000 upward (e.g., 1234 > '1.2k')
+
 ## [0.5.0] - 2026-07-05
 
 ### Added
