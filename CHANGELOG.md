@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Helper functions to format sync run integers for the UI, abbreviating from 1000 upward (e.g., 1234 > '1.2k')
+- Settings at `/settings` (General, Cards, Sync) with gear button that reads and writes `config.yaml` on save
+- Optional private repo discovery (`sync.include_private` in `config.yaml` or settings toggle)
+- Index sort and filter toolbar, period-over-period deltas on tiles, view/clone sparklines, and fuzzy repo search
+- Detail page: top referrers, top paths, and collapsible GitHub data revision log
+- `config.example.yaml` template with `auth`, `display`, `cards`, `sync`, `paths`, and `server` sections
+- Global CLI flag `--config` / `-c` for a non-default config file path
+
+### Changed
+
+- **Breaking:** all configuration is in `config.yaml` only. Secrets (`auth.github_token`, `auth.secret_key`) live in YAML, not `.env`. Token fallback remains `gh auth token` when `auth.github_token` is empty.
+
+### Removed
+
+- `.env` / `.env.example` and all `GITHUB_TRAFFIC_VAULT_*` environment variables
+- Legacy `.env` auto-import and `envfile.py`
 
 ## [0.5.0] - 2026-07-05
 
