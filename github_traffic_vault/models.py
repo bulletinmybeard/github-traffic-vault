@@ -59,6 +59,9 @@ class Repo(Base):
     release_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     open_pr_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # container-visible path to a local checkout (under config local.roots)
+    local_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
 
 class RepoSync(Base):
     __tablename__ = "repo_syncs"

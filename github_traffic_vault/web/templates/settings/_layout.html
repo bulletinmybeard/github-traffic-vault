@@ -18,6 +18,8 @@
            {% if active_section == 'cards' %}aria-current="page"{% endif %}>Cards</a>
         <a href="/settings/sync" class="settings-nav-item{% if active_section == 'sync' %} active{% endif %}"
            {% if active_section == 'sync' %}aria-current="page"{% endif %}>Sync</a>
+        <a href="/settings/local" class="settings-nav-item{% if active_section == 'local' %} active{% endif %}"
+           {% if active_section == 'local' %}aria-current="page"{% endif %}>Local</a>
     </nav>
     <div class="settings-panel">
         {% block settings_content %}{% endblock %}

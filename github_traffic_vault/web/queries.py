@@ -260,6 +260,7 @@ class RepoView:
     total_clones: int
     total_c_uniques: int
     status: RepoStatus
+    local_path: str | None = None
     delta_views: str | None = None
     delta_clones: str | None = None
     delta_views_class: str = ""
@@ -753,6 +754,7 @@ def repo_detail(
         total_v_uniques=totals[1],
         total_clones=totals[2],
         total_c_uniques=totals[3],
+        local_path=repo.local_path,
         delta_views=dv,
         delta_clones=dc,
         delta_views_class=delta_class(dv),

@@ -8,6 +8,8 @@ services:
       - ./github_traffic_vault:/app/github_traffic_vault
       - ./config.yaml:/app/config.yaml
       - ./data:/app/data
+      # Optional: host projects for detail-page local link (match local.roots in config.yaml)
+      # - /path/to/your/projects:/mnt/www:ro
     command:
       [
         "github-traffic-vault",

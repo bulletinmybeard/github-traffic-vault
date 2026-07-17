@@ -10,7 +10,6 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
@@ -187,7 +186,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "period": period,
                 "archive": archive,
                 "presets": PERIOD_PRESETS,
-                "error": error,
+                "flash_error": _take_flash_error(request) or error,
                 "csrf_token": csrf,
                 "tiles_per_row": cfg.tiles_per_row,
                 "show_tile_today": cfg.show_tile_today,
@@ -229,15 +228,14 @@ def create_app(cfg: Config) -> FastAPI:
             token = resolve_token(cfg.github_token)
         except TokenError as exc:
             log.warning("sync via web: token error: %s", exc)
-            sep = "&" if "?" in safe_next else "?"
-            return RedirectResponse(url=f"{safe_next}{sep}error={quote(str(exc), safe='')}", status_code=303)
+            _flash_error(request, str(exc))
+            return RedirectResponse(url=safe_next, status_code=303)
         with GitHubClient(token, cfg.user_agent) as gh, session_scope(engine) as session:
             if only_repo:
                 repo = session.scalar(select(Repo).where(Repo.full_name == only_repo))
                 if repo is None:
-                    sep = "&" if "?" in safe_next else "?"
-                    msg = quote(f"unknown repo: {only_repo}", safe="")
-                    return RedirectResponse(url=f"{safe_next}{sep}error={msg}", status_code=303)
+                    _flash_error(request, f"unknown repo: {only_repo}")
+                    return RedirectResponse(url=safe_next, status_code=303)
                 run_sync(
                     session,
                     gh,
@@ -452,11 +450,15 @@ def create_app(cfg: Config) -> FastAPI:
             return HTMLResponse("csrf token mismatch", status_code=403)
         cfg = _cfg_ref.cfg
         full_name = f"{owner}/{repo_name}"
-        safe_next = next_url if next_url.startswith("/") and not next_url.startswith(("//", "/\\")) else f"/{full_name}"
+        safe_next = (
+            next_url
+            if next_url.startswith("/") and not next_url.startswith(("//", "/\\"))
+            else f"/{full_name}"
+        )
         resolved, err = validate_link_path(path, cfg.local_roots, full_name)
         if err:
-            sep = "&" if "?" in safe_next else "?"
-            return RedirectResponse(url=f"{safe_next}{sep}error={quote(err, safe='')}", status_code=303)
+            _flash_error(request, err)
+            return RedirectResponse(url=safe_next, status_code=303)
         with session_scope(engine) as session:
             repo = session.scalar(select(Repo).where(Repo.full_name == full_name))
             if repo is None:
@@ -475,7 +477,11 @@ def create_app(cfg: Config) -> FastAPI:
         if not _csrf_ok(request, csrf_token):
             return HTMLResponse("csrf token mismatch", status_code=403)
         full_name = f"{owner}/{repo_name}"
-        safe_next = next_url if next_url.startswith("/") and not next_url.startswith(("//", "/\\")) else f"/{full_name}"
+        safe_next = (
+            next_url
+            if next_url.startswith("/") and not next_url.startswith(("//", "/\\"))
+            else f"/{full_name}"
+        )
         with session_scope(engine) as session:
             repo = session.scalar(select(Repo).where(Repo.full_name == full_name))
             if repo is None:
@@ -522,6 +528,7 @@ def create_app(cfg: Config) -> FastAPI:
             for d in view.daily
         ]
         local = inspect_local(view.local_path, cfg.local_roots, full_name)
+        flash_error = _take_flash_error(request) or error
         return templates.TemplateResponse(
             request,
             "detail.html",
@@ -529,7 +536,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "repo": view,
                 "period": view.period,
                 "presets": PERIOD_PRESETS,
-                "error": error,
+                "flash_error": flash_error,
                 "chart_data": chart_data,
                 "csrf_token": csrf,
                 "show_sync_meta": False,
@@ -640,6 +647,16 @@ def _save_settings(app: FastAPI, updates: Mapping[str, object]) -> None:
 def _csrf_ok(request: Request, csrf_token: str) -> bool:
     session_token = request.session.get("csrf_token")
     return bool(session_token and secrets.compare_digest(csrf_token, session_token))
+
+
+def _flash_error(request: Request, message: str) -> None:
+    """Store a one-shot error for the next page render (toast, not URL)."""
+    request.session["flash_error"] = message
+
+
+def _take_flash_error(request: Request) -> str | None:
+    msg = request.session.pop("flash_error", None)
+    return str(msg) if msg else None
 
 
 def _repo_to_dict(rv: Any) -> dict[str, Any]:

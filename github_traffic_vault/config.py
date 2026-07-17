@@ -65,6 +65,18 @@ def _as_repo_set(value: object) -> frozenset[str]:
     return frozenset()
 
 
+def _as_path_list(value: object) -> tuple[Path, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        items = [line.strip() for line in value.replace(",", "\n").splitlines() if line.strip()]
+    elif isinstance(value, list):
+        items = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        return ()
+    return tuple(Path(item).expanduser() for item in items)
+
+
 def _resolve_tz(name: str) -> tzinfo:
     try:
         return ZoneInfo(name)
@@ -93,6 +105,7 @@ class Config:
     show_tile_sparklines: bool
     tile_sparklines_compact: bool
     display_tz: tzinfo
+    local_roots: tuple[Path, ...]
 
 
 def _ensure_config_file(path: Path) -> dict[str, object]:
@@ -113,6 +126,7 @@ def load(*, config_path: Path | str | None = None) -> Config:
     sync = data.get("sync", {})
     paths = data.get("paths", {})
     server = data.get("server", {})
+    local = data.get("local", {})
 
     if not isinstance(auth, dict):
         auth = {}
@@ -126,6 +140,8 @@ def load(*, config_path: Path | str | None = None) -> Config:
         paths = {}
     if not isinstance(server, dict):
         server = {}
+    if not isinstance(local, dict):
+        local = {}
 
     root = Path.cwd()
     default_data = root / "data"
@@ -155,6 +171,7 @@ def load(*, config_path: Path | str | None = None) -> Config:
         show_tile_sparklines=_as_bool(cards.get("show_sparklines"), True),
         tile_sparklines_compact=_as_bool(cards.get("sparklines_compact"), False),
         display_tz=_resolve_tz(tz_name),
+        local_roots=_as_path_list(local.get("roots")),
     )
 
 
