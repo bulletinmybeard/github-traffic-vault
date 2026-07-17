@@ -3,20 +3,25 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'          # version tags, e.g., v0.2.0
-  workflow_dispatch:   # manual release of a tag
+      - "v*" # version tags, e.g., v0.2.0
+  workflow_dispatch: # manual release of a tag
     inputs:
       tag_name:
-        description: 'Git tag to release (e.g., v0.2.0)'
+        description: "Git tag to release (e.g., v0.2.0)"
         required: true
         type: string
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
   release:
     name: Create GitHub release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       # Untrusted input (workflow_dispatch tag_name) goes through env, never
       # interpolated straight into the shell, to avoid command injection.
@@ -40,17 +45,38 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.name }}
         run: |
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          VERSION="${TAG#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$TAG" ]; then
+            echo "Tag must look like vX.Y.Z (got: $TAG)" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          PACKAGE_VERSION="$(python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          print(data["tool"]["poetry"]["version"])
+          PY
+          )"
+          echo "tag version:     $VERSION"
+          echo "package version: $PACKAGE_VERSION"
+          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Tag v${VERSION} does not match pyproject.toml version ${PACKAGE_VERSION}" >&2
+            exit 1
+          fi
 
       - name: Generate release notes
         env:
           VERSION: ${{ steps.version.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
-          # Flag-based extraction (as in voice-memo-export): print the lines
-          # between "## [VERSION]" and the next "## [" header, excluding both.
-          # A range expression (/a/,/b/) breaks here because the header line
-          # matches both patterns and collapses the range to one line.
+          # Flag-based extraction: print the lines between "## [VERSION]" and
+          # the next "## [" header, excluding both.
           CHANGELOG_SECTION=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{found=0} found" CHANGELOG.md || echo "")
           echo "DEBUG: extracted changelog length: ${#CHANGELOG_SECTION}"
 
