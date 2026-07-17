@@ -44,6 +44,7 @@ GitHub only retains repository traffic data (views, clones, top referrers, top p
 - **Syncs your public repos**: discovers everything you own, pulls fresh numbers, and remembers the history. Hit **Sync Now** in the browser or schedule `sync` from the terminal
 - **Shows the big picture**: an index page with every repo as a card — totals for the period you pick, plus today. Defaults to the last 30 days
 - **Drills into one repo**: daily chart, month-by-month breakdown, and a quick status glance (CI, latest release, open PRs)
+- **Links a local git repository** (optional): on the detail page, point at a project directory under configured roots to see branch, dirty state, and whether git `origin` matches that GitHub repo
 - **Flexible date ranges**: same picker on index and detail — this month, last month, last N months, all time, or a custom from/to range
 
 You need a [GitHub personal access token](https://github.com/settings/tokens) with `repo` scope.
@@ -87,11 +88,44 @@ The SPA, server-rendered (FastAPI + Jinja2). Each repo gets a card
 with period totals, trend deltas, sparklines, sort/filter, and instant search.
 The detail page adds referrers, paths, and a revision log for when GitHub
 changes historical numbers. A gear button opens `/settings` to edit `config.yaml`
-(timezone, tiles per row, card layout, excluded repos, private-repo sync).
-The `Sync Now` button kicks off a real sync (blocks ~7s, then re-renders).
-The same data is available as JSON at `/api/repos.json`.
+(timezone, tiles per row, card layout, excluded repos, private-repo sync, local roots).
+**Sync Now** on the index runs a full discover + sync; on a detail page it syncs
+only that repository. The same data is available as JSON at `/api/repos.json`.
 
 With `--reload`, you enable `uvicorn` auto-reload for dev (or run via Docker with hot-reload, see below).
+
+### Local project link
+
+Optionally link a locally checked out git repository to the remote GitHub repository
+shown on the detail page. The status card then shows a **Local checkout** section (path, branch, worktree,
+origin match, upstream) separately from **GitHub** status (CI, release, PRs).
+
+##### Configure local roots
+
+Absolute roots the server is allowed to browse (Settings > **Local**, or `local.roots`
+in `config.yaml`). Example for Poetry on your machine:
+
+```yaml
+local:
+  roots:
+    - /Users/you/github-projects
+```
+
+With **Poetry**, use host paths that exist for the process running `serve`
+(e.g., your real project tree). With **local Docker**, put the same roots as
+paths **inside the container** in `config.yaml`, and make sure those directories
+are available to the container (for example via a volume in `docker-compose.yml`
+and roots such as `/mnt/github-projects`).
+
+##### Link a folder on the detail page
+
+Open a repo detail page > **Link folder**. Paste a path under those roots,
+**Browse**, or **Find** (scans roots for a git remote matching `owner/repo`).
+
+##### Validation
+
+Linking only succeeds if the directory is a git repo and its remote URL
+resolves to the same `owner/repo` as the page.
 
 ## Docker
 

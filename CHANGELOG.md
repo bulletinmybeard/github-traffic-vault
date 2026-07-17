@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Scoped detail sync:** on repository detail pages where **Sync Now** syncs only that repo (skips full discovery). The index (and settings) **Sync Now** still discovers and syncs all repositories
+- **Local project link:** link a filesystem checkout to a GitHub repo on the detail page (**Repository status > Local checkout**). Browse or auto-find under configured `local.roots`, or paste an absolute path. Validates that the path is a git repo whose remote matches `owner/repo` before saving. Shows branch, worktree (clean/dirty), origin match vs the detail page, and upstream ahead/behind. Settings > **Local** (or `local.roots` in `config.yaml`) lists absolute directories the server may browse/link
+- Session flash toast for link/sync errors (no sticky `?error=` query param on the detail URL)
+
+### Changed
+
+- Detail **Repository status** card splits **GitHub** (CI, release, PRs) from **Local checkout** (path, branch, worktree, origin, upstream)
+
 ## [0.6.0] - 2026-07-09
 
 ### Added
