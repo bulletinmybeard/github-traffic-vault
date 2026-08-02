@@ -3,10 +3,6 @@
 {% block content %}
 {% include "_topbar.html" %}
 
-{% if error %}
-<div class="banner err">{{ error }}</div>
-{% endif %}
-
 <section class="detail-head">
     <div class="detail-title-row">
         <div class="detail-title">
@@ -23,7 +19,9 @@
         </a>
     </div>
     <div class="detail-meta-row">
-        <span class="badge stars" title="stars">&#9733; {{ repo.stargazers }}</span>
+        <span class="badge stars" title="{% if repo.stargazers_at is not none and repo.stargazers_at != repo.stargazers %}current {{ repo.stargazers }}; {{ repo.stargazers_at }} at end of selected period{% else %}stars{% endif %}">
+            &#9733; {{ repo.stargazers }}{% if repo.stargazers_at is not none and repo.stargazers_at != repo.stargazers %}<span class="stars-then"> · {{ repo.stargazers_at }}</span>{% endif %}
+        </span>
         <span class="badge forks" title="forks">forks {{ repo.forks }}</span>
         <span class="badge watchers" title="watchers">watchers {{ repo.watchers }}</span>
         {% if repo.created_at %}
@@ -77,54 +75,159 @@
             {% endif %}
         </header>
 
-        <div class="status-row">
-            <span class="status-label">CI</span>
-            <div class="status-body">
-                {% if repo.status.ci_state == "none" %}
-                <span class="muted">no workflow runs</span>
-                {% else %}
-                <a class="ci-pill {{ repo.status.ci_pill_class }}" href="{{ repo.status.ci_run_url }}"
-                   target="_blank" rel="noopener">{{ repo.status.ci_label }}</a>
-                <span class="status-sub">
-                    {{ repo.status.ci_workflow or "workflow" }}
-                    {%- if repo.status.ci_branch %} ({{ repo.status.ci_branch }}){% endif %}
-                    {%- if repo.status.ci_run_at %} &middot; {{ repo.status.ci_run_at | relative_time }}{% endif %}
-                </span>
-                {% endif %}
-            </div>
-        </div>
+        <section class="status-section" aria-label="GitHub status">
+            <h4 class="status-section-title">GitHub</h4>
 
-        <div class="status-row">
-            <span class="status-label">Release</span>
-            <div class="status-body">
-                {% if repo.status.release_name %}
-                <a class="version-badge" href="{{ repo.status.release_url }}"
-                   target="_blank" rel="noopener">{{ repo.status.release_name }}</a>
-                <span class="status-sub">
-                    {%- if repo.status.release_kind == "tag" %}git tag
-                    {%- elif repo.status.release_at %}released {{ repo.status.release_at | localdt('%Y-%m-%d') }}
-                    {%- else %}release{% endif %}
-                </span>
-                {% else %}
-                <span class="muted">no releases</span>
-                {% endif %}
+            <div class="status-row">
+                <span class="status-label">CI</span>
+                <div class="status-body">
+                    {% if repo.status.ci_state == "none" %}
+                    <span class="muted">no workflow runs</span>
+                    {% else %}
+                    <a class="ci-pill {{ repo.status.ci_pill_class }}" href="{{ repo.status.ci_run_url }}"
+                       target="_blank" rel="noopener">{{ repo.status.ci_label }}</a>
+                    <span class="status-sub">
+                        {{ repo.status.ci_workflow or "workflow" }}
+                        {%- if repo.status.ci_branch %} ({{ repo.status.ci_branch }}){% endif %}
+                        {%- if repo.status.ci_run_at %} &middot; {{ repo.status.ci_run_at | relative_time }}{% endif %}
+                    </span>
+                    {% endif %}
+                </div>
             </div>
-        </div>
 
-        <div class="status-row">
-            <span class="status-label">Pull requests</span>
-            <div class="status-body">
-                {% if repo.status.open_pr_count %}
-                <a class="pr-count" href="{{ repo.status.pulls_url }}" target="_blank"
-                   rel="noopener">{{ repo.status.open_pr_count }}{% if repo.status.open_pr_count >= 100 %}+{% endif %}</a>
-                <span class="status-sub">{{ repo.status.open_pr_count }} open pull request{{ "s" if repo.status.open_pr_count != 1 else "" }}</span>
-                {% else %}
-                <span class="muted">no open pull requests</span>
-                {% endif %}
+            <div class="status-row">
+                <span class="status-label">Release</span>
+                <div class="status-body">
+                    {% if repo.status.release_name %}
+                    <a class="version-badge" href="{{ repo.status.release_url }}"
+                       target="_blank" rel="noopener">{{ repo.status.release_name }}</a>
+                    <span class="status-sub">
+                        {%- if repo.status.release_kind == "tag" %}git tag
+                        {%- elif repo.status.release_at %}released {{ repo.status.release_at | localdt('%Y-%m-%d') }}
+                        {%- else %}release{% endif %}
+                    </span>
+                    {% else %}
+                    <span class="muted">no releases</span>
+                    {% endif %}
+                </div>
             </div>
-        </div>
+
+            <div class="status-row">
+                <span class="status-label">Pull requests</span>
+                <div class="status-body">
+                    {% if repo.status.open_pr_count %}
+                    <a class="pr-count" href="{{ repo.status.pulls_url }}" target="_blank"
+                       rel="noopener">{{ repo.status.open_pr_count }}{% if repo.status.open_pr_count >= 100 %}+{% endif %}</a>
+                    <span class="status-sub">{{ repo.status.open_pr_count }} open pull request{{ "s" if repo.status.open_pr_count != 1 else "" }}</span>
+                    {% else %}
+                    <span class="muted">no open pull requests</span>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <section class="status-section" aria-label="Local checkout" id="local-status">
+            <h4 class="status-section-title">Local checkout</h4>
+
+            <div class="status-row">
+                <span class="status-label">Path</span>
+                <div class="status-body local-body">
+                    {% if local.linked and local.available %}
+                    <span class="local-pill pass">Linked</span>
+                    <code class="local-path" title="{{ local.path }}">{{ local.path }}</code>
+                    <form method="post" action="/{{ repo.full_name }}/local/unlink" class="inline-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="next" value="{{ sync_next }}">
+                        <button type="submit" class="btn-link">Unlink</button>
+                    </form>
+                    {% elif local.linked %}
+                    <span class="local-pill fail">Broken</span>
+                    <span class="status-sub">{{ local.error or "unavailable" }}</span>
+                    {% if local.path %}<code class="local-path" title="{{ local.path }}">{{ local.path }}</code>{% endif %}
+                    <form method="post" action="/{{ repo.full_name }}/local/unlink" class="inline-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="next" value="{{ sync_next }}">
+                        <button type="submit" class="btn-link">Unlink</button>
+                    </form>
+                    {% else %}
+                    <span class="local-pill other">Not linked</span>
+                    {% if not local_roots_configured %}
+                    <span class="status-sub">Configure <a href="/settings/local">local roots</a> first</span>
+                    {% else %}
+                    <details class="local-link-panel">
+                        <summary>Link folder</summary>
+                        <form method="post" action="/{{ repo.full_name }}/local/link" class="local-link-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="next" value="{{ sync_next }}">
+                            <label class="sr-only" for="local-path-input">Local path</label>
+                            <input type="text" name="path" id="local-path-input" class="local-path-input"
+                                   placeholder="/mnt/www/projects/…" autocomplete="off" spellcheck="false">
+                            <div class="local-link-actions">
+                                <button type="button" class="btn-secondary" id="local-browse-btn">Browse</button>
+                                <button type="button" class="btn-secondary" id="local-find-btn"
+                                        data-full-name="{{ repo.full_name }}">Find</button>
+                                <button type="submit" class="btn btn-sm">Link</button>
+                            </div>
+                            <div class="local-browser" id="local-browser" hidden>
+                                <div class="local-browser-bar">
+                                    <button type="button" class="btn-link" id="local-browser-up" hidden>↑ up</button>
+                                    <code id="local-browser-path" class="local-browser-path"></code>
+                                </div>
+                                <ul class="local-browser-list" id="local-browser-list"></ul>
+                                <p class="muted local-browser-msg" id="local-browser-msg" hidden></p>
+                            </div>
+                        </form>
+                    </details>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if local.available %}
+            <div class="status-row">
+                <span class="status-label">Branch</span>
+                <div class="status-body">
+                    <code>{{ local.branch or "?" }}</code>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Worktree</span>
+                <div class="status-body">
+                    <span class="local-pill {{ local.worktree_class }}">{{ local.worktree_label }}</span>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Origin</span>
+                <div class="status-body local-body">
+                    <span class="local-pill {{ local.origin_class }}">{{ local.origin_label }}</span>
+                    {% if local.remote_matches is true %}
+                    <span class="status-sub">matches <code>{{ repo.full_name }}</code></span>
+                    {% elif local.remote_matches is false %}
+                    <span class="status-sub err-text">
+                        expected <code>{{ repo.full_name }}</code>,
+                        got <code>{{ local.remote_full_name or "unknown" }}</code>
+                    </span>
+                    {% else %}
+                    <span class="status-sub">could not parse GitHub remote from .git</span>
+                    {% endif %}
+                    {% if local.remote_url %}
+                    <code class="local-path" title="{{ local.remote_url }}">{{ local.remote_url }}</code>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Upstream</span>
+                <div class="status-body">
+                    <span class="local-pill {{ local.upstream_class }}">{{ local.upstream_label }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </section>
     </aside>
 </section>
+{% if local_roots_configured %}
+<script src="/static/local-link.js"></script>
+{% endif %}
 
 <section class="referrers-paths-grid">
     <article class="data-card">

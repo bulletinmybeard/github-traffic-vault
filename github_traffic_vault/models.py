@@ -59,6 +59,9 @@ class Repo(Base):
     release_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     open_pr_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # container-visible path to a local checkout (under config local.roots)
+    local_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
 
 class RepoSync(Base):
     __tablename__ = "repo_syncs"
@@ -99,6 +102,16 @@ class DailyClones(Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime)
     last_changed_at: Mapped[datetime] = mapped_column(DateTime)
     change_count: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class DailyStars(Base):
+    """Point-in-time stars count observed on a UTC calendar day (from sync)."""
+
+    __tablename__ = "daily_stars"
+
+    repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id"), primary_key=True)
+    date: Mapped[_date] = mapped_column(Date, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer)
 
 
 class ReferrerSnapshot(Base):
@@ -156,6 +169,7 @@ __all__ = [
     "Base",
     "ChangeEvent",
     "DailyClones",
+    "DailyStars",
     "DailyViews",
     "Etag",
     "PathSnapshot",

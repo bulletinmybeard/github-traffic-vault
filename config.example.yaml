@@ -42,3 +42,11 @@ server:
   # Trust X-Forwarded-Proto/For from a reverse proxy. Use "*" behind Traefik/Docker
   # (required for https:// asset URLs). Use 127.0.0.1 for direct local http dev only.
   forwarded_allow_ips: "*"
+
+local:
+  # Absolute paths the server may browse/link for local git status on detail pages.
+  # Include both host (Poetry) and container (Docker) paths as needed:
+  #   roots:
+  #     - /Users/you/www          # poetry on Mac
+  #     - /mnt/www                # Docker: host tree mounted at /mnt/www
+  roots: []

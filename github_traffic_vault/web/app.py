@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from collections.abc import Mapping
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
 from github_traffic_vault.config import Config
@@ -22,6 +23,13 @@ from github_traffic_vault.config import load as load_config
 from github_traffic_vault.config_store import update_config_file
 from github_traffic_vault.db import init_schema, make_engine, session_scope
 from github_traffic_vault.github_api import GitHubClient, TokenError, resolve_token
+from github_traffic_vault.local_git import (
+    find_under_roots,
+    inspect_local,
+    list_browse,
+    validate_link_path,
+)
+from github_traffic_vault.models import Repo
 from github_traffic_vault.numfmt import compact_number
 from github_traffic_vault.repos import discover_and_upsert
 from github_traffic_vault.sync import SyncOptions, run_sync
@@ -40,7 +48,10 @@ from github_traffic_vault.web.queries import (
     repo_totals,
     repo_views,
     resolve_period,
+    sort_filter_query_string,
 )
+
+_REPO_FULL_NAME_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 
 log = logging.getLogger(__name__)
 
@@ -176,7 +187,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "period": period,
                 "archive": archive,
                 "presets": PERIOD_PRESETS,
-                "error": error,
+                "flash_error": _take_flash_error(request) or error,
                 "csrf_token": csrf,
                 "tiles_per_row": cfg.tiles_per_row,
                 "show_tile_today": cfg.show_tile_today,
@@ -187,7 +198,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "sort_options": [{"key": k, "label": label} for k, label in SORT_OPTIONS],
                 "filter_options": filter_options,
                 "index_qs": index_query_string(period, sort, filter_),
-                "index_qs_base": period.query_string,
+                "qs_keep": sort_filter_query_string(sort, filter_),
                 "sparkline_payload": sparkline_payload,
                 "show_sync_meta": True,
                 "show_sync_button": True,
@@ -202,6 +213,7 @@ def create_app(cfg: Config) -> FastAPI:
         request: Request,
         next_url: str = Form(default="/", alias="next"),
         csrf_token: str = Form(default=""),
+        only: str = Form(default=""),
     ) -> Response:
         session_token = request.session.get("csrf_token")
         if not session_token or not secrets.compare_digest(csrf_token, session_token):
@@ -209,18 +221,35 @@ def create_app(cfg: Config) -> FastAPI:
 
         cfg = _cfg_ref.cfg
         safe_next = next_url if next_url.startswith("/") and not next_url.startswith(("//", "/\\")) else "/"
+        only_repo = only.strip()
+        if only_repo and not _REPO_FULL_NAME_RE.fullmatch(only_repo):
+            return HTMLResponse("invalid only parameter", status_code=400)
+
         try:
             token = resolve_token(cfg.github_token)
         except TokenError as exc:
             log.warning("sync via web: token error: %s", exc)
-            sep = "&" if "?" in safe_next else "?"
-            return RedirectResponse(url=f"{safe_next}{sep}error={quote(str(exc), safe='')}", status_code=303)
+            _flash_error(request, str(exc))
+            return RedirectResponse(url=safe_next, status_code=303)
         with GitHubClient(token, cfg.user_agent) as gh, session_scope(engine) as session:
-            results = discover_and_upsert(
-                session, gh, exclude_repos=cfg.exclude_repos, include_private=cfg.include_private
-            )
-            repos = [r.repo for r in results]
-            run_sync(session, gh, cfg, SyncOptions(exclude_repos=cfg.exclude_repos), repos)
+            if only_repo:
+                repo = session.scalar(select(Repo).where(Repo.full_name == only_repo))
+                if repo is None:
+                    _flash_error(request, f"unknown repo: {only_repo}")
+                    return RedirectResponse(url=safe_next, status_code=303)
+                run_sync(
+                    session,
+                    gh,
+                    cfg,
+                    SyncOptions(only_repos=[only_repo], exclude_repos=cfg.exclude_repos),
+                    [repo],
+                )
+            else:
+                results = discover_and_upsert(
+                    session, gh, exclude_repos=cfg.exclude_repos, include_private=cfg.include_private
+                )
+                repos = [r.repo for r in results]
+                run_sync(session, gh, cfg, SyncOptions(exclude_repos=cfg.exclude_repos), repos)
 
         return RedirectResponse(url=safe_next, status_code=303)
 
@@ -359,6 +388,108 @@ def create_app(cfg: Config) -> FastAPI:
         _save_settings(request.app, updates)
         return RedirectResponse("/settings/sync?saved=1", status_code=303)
 
+    @app.get("/settings/local", response_class=HTMLResponse)
+    def settings_local(request: Request, saved: int | None = None) -> HTMLResponse:
+        cfg = _cfg_ref.cfg
+        return templates.TemplateResponse(
+            request,
+            "settings/local.html",
+            _settings_context(request, active_section="local", saved=bool(saved), form=_local_form(cfg)),
+        )
+
+    @app.post("/settings/local")
+    def settings_local_save(
+        request: Request,
+        csrf_token: str = Form(default=""),
+        roots: str = Form(default=""),
+    ) -> Response:
+        if not _csrf_ok(request, csrf_token):
+            return HTMLResponse("csrf token mismatch", status_code=403)
+        root_list = [line.strip() for line in roots.replace(",", "\n").splitlines() if line.strip()]
+        _save_settings(request.app, {"local": {"roots": root_list}})
+        return RedirectResponse("/settings/local?saved=1", status_code=303)
+
+    @app.get("/api/local/browse")
+    def api_local_browse(path: str | None = None) -> JSONResponse:
+        cfg = _cfg_ref.cfg
+        listing = list_browse(path, cfg.local_roots)
+        return JSONResponse(
+            {
+                "path": listing.path,
+                "parent": listing.parent,
+                "error": listing.error,
+                "entries": [
+                    {
+                        "name": e.name,
+                        "path": e.path,
+                        "is_dir": e.is_dir,
+                        "is_git": e.is_git,
+                    }
+                    for e in listing.entries
+                ],
+            }
+        )
+
+    @app.get("/api/local/find")
+    def api_local_find(full_name: str = Query(...)) -> JSONResponse:
+        cfg = _cfg_ref.cfg
+        if not _REPO_FULL_NAME_RE.fullmatch(full_name):
+            return JSONResponse({"error": "invalid full_name"}, status_code=400)
+        matches = find_under_roots(cfg.local_roots, full_name)
+        return JSONResponse({"matches": matches})
+
+    @app.post("/{owner}/{repo_name}/local/link")
+    def local_link(
+        request: Request,
+        owner: str,
+        repo_name: str,
+        path: str = Form(default=""),
+        csrf_token: str = Form(default=""),
+        next_url: str = Form(default="", alias="next"),
+    ) -> Response:
+        if not _csrf_ok(request, csrf_token):
+            return HTMLResponse("csrf token mismatch", status_code=403)
+        cfg = _cfg_ref.cfg
+        full_name = f"{owner}/{repo_name}"
+        safe_next = (
+            next_url
+            if next_url.startswith("/") and not next_url.startswith(("//", "/\\"))
+            else f"/{full_name}"
+        )
+        resolved, err = validate_link_path(path, cfg.local_roots, full_name)
+        if err:
+            _flash_error(request, err)
+            return RedirectResponse(url=safe_next, status_code=303)
+        with session_scope(engine) as session:
+            repo = session.scalar(select(Repo).where(Repo.full_name == full_name))
+            if repo is None:
+                return PlainTextResponse(f"no such repo: {full_name}", status_code=404)
+            repo.local_path = str(resolved)
+        return RedirectResponse(url=safe_next, status_code=303)
+
+    @app.post("/{owner}/{repo_name}/local/unlink")
+    def local_unlink(
+        request: Request,
+        owner: str,
+        repo_name: str,
+        csrf_token: str = Form(default=""),
+        next_url: str = Form(default="", alias="next"),
+    ) -> Response:
+        if not _csrf_ok(request, csrf_token):
+            return HTMLResponse("csrf token mismatch", status_code=403)
+        full_name = f"{owner}/{repo_name}"
+        safe_next = (
+            next_url
+            if next_url.startswith("/") and not next_url.startswith(("//", "/\\"))
+            else f"/{full_name}"
+        )
+        with session_scope(engine) as session:
+            repo = session.scalar(select(Repo).where(Repo.full_name == full_name))
+            if repo is None:
+                return PlainTextResponse(f"no such repo: {full_name}", status_code=404)
+            repo.local_path = None
+        return RedirectResponse(url=safe_next, status_code=303)
+
     @app.get("/{owner}/{repo_name}", response_class=HTMLResponse)
     def detail(
         request: Request,
@@ -397,6 +528,8 @@ def create_app(cfg: Config) -> FastAPI:
             }
             for d in view.daily
         ]
+        local = inspect_local(view.local_path, cfg.local_roots, full_name)
+        flash_error = _take_flash_error(request) or error
         return templates.TemplateResponse(
             request,
             "detail.html",
@@ -404,7 +537,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "repo": view,
                 "period": view.period,
                 "presets": PERIOD_PRESETS,
-                "error": error,
+                "flash_error": flash_error,
                 "chart_data": chart_data,
                 "csrf_token": csrf,
                 "show_sync_meta": False,
@@ -412,6 +545,9 @@ def create_app(cfg: Config) -> FastAPI:
                 "show_repo_search": False,
                 "settings_active": False,
                 "sync_next": f"/{full_name}?{view.period.query_string if view.period else ''}",
+                "sync_only": full_name,
+                "local": local,
+                "local_roots_configured": bool(cfg.local_roots),
             },
         )
 
@@ -446,6 +582,10 @@ def _cards_form(cfg: Config) -> dict[str, bool]:
 
 def _sync_form(cfg: Config) -> dict[str, bool]:
     return {"include_private": cfg.include_private}
+
+
+def _local_form(cfg: Config) -> dict[str, str]:
+    return {"roots": "\n".join(str(p) for p in cfg.local_roots)}
 
 
 def _settings_context(request: Request, **extra: Any) -> dict[str, Any]:
@@ -508,6 +648,16 @@ def _save_settings(app: FastAPI, updates: Mapping[str, object]) -> None:
 def _csrf_ok(request: Request, csrf_token: str) -> bool:
     session_token = request.session.get("csrf_token")
     return bool(session_token and secrets.compare_digest(csrf_token, session_token))
+
+
+def _flash_error(request: Request, message: str) -> None:
+    """Store a one-shot error for the next page render (toast, not URL)."""
+    request.session["flash_error"] = message
+
+
+def _take_flash_error(request: Request) -> str | None:
+    msg = request.session.pop("flash_error", None)
+    return str(msg) if msg else None
 
 
 def _repo_to_dict(rv: Any) -> dict[str, Any]:

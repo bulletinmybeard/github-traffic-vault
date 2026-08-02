@@ -11,6 +11,9 @@
     <main class="container">
         {% block content %}{% endblock %}
     </main>
+    {% if flash_error is defined and flash_error %}
+    <div class="toast toast-err" id="flash-toast" role="alert">{{ flash_error }}</div>
+    {% endif %}
     <script>
         // Disable the sync button + show a spinner while the request is
         // in flight. Plain form POST (no htmx), so the browser navigates
@@ -27,6 +30,27 @@
             btn.disabled = true;
             btn.classList.add("loading");
         });
+
+        // One-shot toast: auto-hide and strip legacy ?error= from the URL.
+        (function () {
+            var toast = document.getElementById("flash-toast");
+            var params = new URLSearchParams(window.location.search);
+            if (params.has("error")) {
+                params.delete("error");
+                var qs = params.toString();
+                var clean = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
+                window.history.replaceState(null, "", clean);
+            }
+            if (!toast) {
+                return;
+            }
+            window.setTimeout(function () {
+                toast.classList.add("toast-hide");
+            }, 5000);
+            window.setTimeout(function () {
+                toast.remove();
+            }, 5600);
+        })();
     </script>
     <script src="/static/period-menu.js"></script>
 </body>

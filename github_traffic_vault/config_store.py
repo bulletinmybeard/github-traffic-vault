@@ -41,12 +41,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "secure_cookie": False,
         "forwarded_allow_ips": "*",
     },
+    "local": {
+        "roots": [],
+    },
 }
 
 SETTINGS_SECTIONS: dict[str, frozenset[str]] = {
     "display": frozenset({"timezone", "tiles_per_row"}),
     "cards": frozenset({"show_today", "show_sparklines", "sparklines_compact", "sparkline_days"}),
     "sync": frozenset({"include_private", "exclude_repos"}),
+    "local": frozenset({"roots"}),
 }
 
 

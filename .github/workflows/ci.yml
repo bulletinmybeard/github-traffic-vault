@@ -4,8 +4,14 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -22,13 +28,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
-
-      - name: Load cached venv
-        uses: actions/cache@v6
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-3.12-${{ hashFiles('**/poetry.lock') }}
+          python-version: "3.12"
+          cache: poetry
 
       - name: Verify poetry.lock is up-to-date
         run: poetry check --lock
@@ -53,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13']
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
 
@@ -66,12 +67,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Load cached venv
-        uses: actions/cache@v6
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          cache: poetry
 
       - name: Install dependencies
         run: poetry install --no-interaction --sync
@@ -91,10 +87,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Build wheel + sdist
         run: pipx run build
+
+      - name: Verify package version is set
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          version = data["tool"]["poetry"]["version"]
+          assert version, "empty package version in pyproject.toml"
+          print(f"package version: {version}")
+          PY
 
       - name: Verify wheel installs + CLI runs
         run: |
@@ -114,9 +121,27 @@ jobs:
           path: dist/
           retention-days: 7
 
+  docker:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: github-traffic-vault:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   ci-summary:
     name: CI Summary
-    needs: [lint, smoke, build]
+    needs: [lint, smoke, build, docker]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -129,9 +154,14 @@ jobs:
           echo "| Lint, format & types | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Smoke | ${{ needs.smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Build & verify wheel | ${{ needs.build.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker image build | ${{ needs.docker.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ needs.lint.result }}" = "success" ] && [ "${{ needs.smoke.result }}" = "success" ] && [ "${{ needs.build.result }}" = "success" ]; then
+          if [ "${{ needs.lint.result }}" = "success" ] \
+            && [ "${{ needs.smoke.result }}" = "success" ] \
+            && [ "${{ needs.build.result }}" = "success" ] \
+            && [ "${{ needs.docker.result }}" = "success" ]; then
             echo "All CI checks passed." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Some CI checks failed - see the jobs above." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi

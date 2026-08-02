@@ -3,11 +3,7 @@
 {% block content %}
 {% include "_topbar.html" %}
 
-{% if error %}
-<div class="banner err">{{ error }}</div>
-{% endif %}
-
-{% with base_path="/", archive=archive %}
+{% with base_path="/", archive=archive, sort=sort, filter_=filter_, qs_keep=qs_keep %}
 {% include "_period_nav.html" %}
 {% endwith %}
 
@@ -23,7 +19,11 @@
                 <span class="owner">{{ t.owner }}/</span><span class="name">{{ t.name }}</span>
             </div>
             <div class="tile-tags">
-                {% if t.stargazers %}<span class="badge stars" title="stars">&#9733; {{ t.stargazers }}</span>{% endif %}
+                {% if t.stargazers or t.stargazers_at is not none %}
+                <span class="badge stars" title="{% if t.stargazers_at is not none and t.stargazers_at != t.stargazers %}current {{ t.stargazers }}; {{ t.stargazers_at }} at end of selected period{% else %}stars{% endif %}">
+                    &#9733; {{ t.stargazers }}{% if t.stargazers_at is not none and t.stargazers_at != t.stargazers %}<span class="stars-then"> · {{ t.stargazers_at }}</span>{% endif %}
+                </span>
+                {% endif %}
                 {% if t.is_private %}<span class="tag private">private</span>{% endif %}
                 {% if t.is_archived %}<span class="tag archived">archived</span>{% endif %}
                 {% if t.is_fork %}<span class="tag fork">fork</span>{% endif %}

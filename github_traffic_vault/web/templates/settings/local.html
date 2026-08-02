@@ -1,0 +1,24 @@
+{% extends "settings/_layout.html" %}
+
+{% block settings_content %}
+<h2 class="settings-title">Local projects</h2>
+<p class="settings-lead muted">
+    Absolute directories the server may browse when linking a local git checkout on the detail page.
+    In Docker, mount the host tree at a stable path (e.g. <code>/mnt/www</code>) and list that path here.
+</p>
+
+<form method="post" action="/settings/local" class="settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label class="field">
+        <span class="field-label">Project roots</span>
+        <textarea name="roots" rows="5" placeholder="/mnt/www&#10;/Users/you/www">{{ form.roots }}</textarea>
+        <span class="field-hint muted">
+            One absolute path per line. Only paths under these roots can be linked.
+            Poetry example: <code>/Users/you/www</code>. Docker example: <code>/mnt/www</code>.
+        </span>
+    </label>
+
+    <button type="submit" class="btn">Save changes</button>
+</form>
+{% endblock %}

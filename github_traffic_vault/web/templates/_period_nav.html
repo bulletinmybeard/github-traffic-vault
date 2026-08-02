@@ -5,12 +5,20 @@
         <div class="period-panel">
             <div class="period-presets">
                 {% for preset in presets %}
-                <a class="period-item{% if preset.matches(period) %} active{% endif %}" href="{{ base_path }}?{{ preset.query_string }}">{{ preset.label }}</a>
+                <a class="period-item{% if preset.matches(period) %} active{% endif %}"
+                   href="{{ base_path }}?{{ preset.query_string }}{% if qs_keep %}&{{ qs_keep }}{% endif %}">{{ preset.label }}</a>
                 {% endfor %}
-                <a class="period-item{% if period.kind == 'all' %} active{% endif %}" href="{{ base_path }}?range=all">All time</a>
+                <a class="period-item{% if period.kind == 'all' %} active{% endif %}"
+                   href="{{ base_path }}?range=all{% if qs_keep %}&{{ qs_keep }}{% endif %}">All time</a>
             </div>
             <div class="period-divider"></div>
             <form class="period-custom" method="get" action="{{ base_path }}">
+                {% if sort is defined and sort and sort != 'created' %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+                {% endif %}
+                {% if filter_ is defined and filter_ and filter_ != 'public' %}
+                <input type="hidden" name="filter" value="{{ filter_ }}">
+                {% endif %}
                 <span class="period-custom-label">Custom range</span>
                 <label>from
                     <input type="date" name="from" value="{{ period.start.isoformat() }}" min="{{ period.min_date.isoformat() }}" max="{{ period.max_date.isoformat() }}">

@@ -31,7 +31,10 @@
         <form method="post" action="/sync" class="sync-form">
             <input type="hidden" name="next" value="{{ sync_next }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn sync-btn">
+            {% if sync_only is defined and sync_only %}
+            <input type="hidden" name="only" value="{{ sync_only }}">
+            {% endif %}
+            <button type="submit" class="btn sync-btn"{% if sync_only is defined and sync_only %} title="Only this repository"{% endif %}>
                 <span class="spinner" aria-hidden="true"></span>
                 <span class="label">Sync Now</span>
                 <span class="label-loading">Syncing...</span>

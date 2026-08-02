@@ -52,6 +52,7 @@ _AD_HOC_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("repos", "release_at", "ALTER TABLE repos ADD COLUMN release_at DATETIME"),
     ("repos", "open_pr_count", "ALTER TABLE repos ADD COLUMN open_pr_count INTEGER"),
     ("repos", "is_private", "ALTER TABLE repos ADD COLUMN is_private BOOLEAN DEFAULT 0"),
+    ("repos", "local_path", "ALTER TABLE repos ADD COLUMN local_path VARCHAR"),
 )
 
 
