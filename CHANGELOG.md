@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-02
+
+### Fixed
+
+- Hide the star badge on index tiles and the detail page when a repo has 0 stargazers (regression from the period-end stars UI)
+
 ## [0.7.0] - 2026-08-02
 
 ### Added

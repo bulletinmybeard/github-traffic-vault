@@ -19,7 +19,7 @@
                 <span class="owner">{{ t.owner }}/</span><span class="name">{{ t.name }}</span>
             </div>
             <div class="tile-tags">
-                {% if t.stargazers or t.stargazers_at is not none %}
+                {% if t.stargazers %}
                 <span class="badge stars" title="{% if t.stargazers_at is not none and t.stargazers_at != t.stargazers %}current {{ t.stargazers }}; {{ t.stargazers_at }} at end of selected period{% else %}stars{% endif %}">
                     &#9733; {{ t.stargazers }}{% if t.stargazers_at is not none and t.stargazers_at != t.stargazers %}<span class="stars-then"> · {{ t.stargazers_at }}</span>{% endif %}
                 </span>
