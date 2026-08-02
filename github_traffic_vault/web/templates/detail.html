@@ -19,9 +19,11 @@
         </a>
     </div>
     <div class="detail-meta-row">
+        {% if repo.stargazers %}
         <span class="badge stars" title="{% if repo.stargazers_at is not none and repo.stargazers_at != repo.stargazers %}current {{ repo.stargazers }}; {{ repo.stargazers_at }} at end of selected period{% else %}stars{% endif %}">
             &#9733; {{ repo.stargazers }}{% if repo.stargazers_at is not none and repo.stargazers_at != repo.stargazers %}<span class="stars-then"> · {{ repo.stargazers_at }}</span>{% endif %}
         </span>
+        {% endif %}
         <span class="badge forks" title="forks">forks {{ repo.forks }}</span>
         <span class="badge watchers" title="watchers">watchers {{ repo.watchers }}</span>
         {% if repo.created_at %}
