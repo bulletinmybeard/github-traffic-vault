@@ -12,6 +12,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from github_traffic_vault.models import (
     ChangeEvent,
     DailyClones,
+    DailyStars,
     DailyViews,
     PathSnapshot,
     ReferrerSnapshot,
@@ -76,6 +77,7 @@ class RepoTotal:
     sparkline_views: list[int] = field(default_factory=list)
     sparkline_clones: list[int] = field(default_factory=list)
     created_at: datetime | None = None
+    stargazers_at: int | None = None
 
 
 @dataclass
@@ -261,6 +263,7 @@ class RepoView:
     total_c_uniques: int
     status: RepoStatus
     local_path: str | None = None
+    stargazers_at: int | None = None
     delta_views: str | None = None
     delta_clones: str | None = None
     delta_views_class: str = ""
@@ -365,7 +368,17 @@ def build_filter_options(counts: dict[str, int]) -> list[dict[str, str | int | b
 
 
 def index_query_string(period: Period, sort: str = "created", filter_: str = "public") -> str:
+    """Full index GET query: period + sort + filter (omits default sort/filter)."""
     parts = [period.query_string]
+    extra = sort_filter_query_string(sort, filter_)
+    if extra:
+        parts.append(extra)
+    return "&".join(parts)
+
+
+def sort_filter_query_string(sort: str = "created", filter_: str = "public") -> str:
+    """Sort/filter only — append to period links so changing period keeps them."""
+    parts: list[str] = []
     if sort != "created":
         parts.append(f"sort={sort}")
     if filter_ != "public":
@@ -581,6 +594,8 @@ def repo_totals(
 
     repo_ids = {r.id for r in repos}
     current_totals = _repo_period_totals(repo_ids, views, clones)
+    stars_as_of = period.end if period is not None else end
+    stars_at = stars_at_or_before(session, repo_ids, stars_as_of)
 
     out: list[RepoTotal] = []
     for repo in repos:
@@ -626,6 +641,7 @@ def repo_totals(
                 sparkline_views=spark_views,
                 sparkline_clones=spark_clones,
                 created_at=repo.created_at,
+                stargazers_at=stars_at.get(repo.id),
             )
         )
 
@@ -737,6 +753,7 @@ def repo_detail(
 
     dv = delta_label(totals[0], prior_views_total, comparable=deltas_comparable)
     dc = delta_label(totals[2], prior_clones_total, comparable=deltas_comparable)
+    stars_map = stars_at_or_before(session, {repo.id}, period.end)
 
     return RepoView(
         owner=repo.owner,
@@ -755,6 +772,7 @@ def repo_detail(
         total_clones=totals[2],
         total_c_uniques=totals[3],
         local_path=repo.local_path,
+        stargazers_at=stars_map.get(repo.id),
         delta_views=dv,
         delta_clones=dc,
         delta_views_class=delta_class(dv),
@@ -768,6 +786,21 @@ def repo_detail(
         paths=latest_paths(session, repo.id),
         revisions=revision_log(session, repo.id),
     )
+
+
+def stars_at_or_before(session: Session, repo_ids: set[int], as_of: date) -> dict[int, int]:
+    """Latest star snapshot on or before ``as_of`` for each repo."""
+    if not repo_ids:
+        return {}
+    rows = session.scalars(
+        select(DailyStars).where(DailyStars.repo_id.in_(repo_ids), DailyStars.date <= as_of)
+    ).all()
+    best: dict[int, tuple[date, int]] = {}
+    for row in rows:
+        prev = best.get(row.repo_id)
+        if prev is None or row.date > prev[0]:
+            best[row.repo_id] = (row.date, row.count)
+    return {repo_id: count for repo_id, (_d, count) in best.items()}
 
 
 def repo_views(

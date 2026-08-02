@@ -104,6 +104,16 @@ class DailyClones(Base):
     change_count: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class DailyStars(Base):
+    """Point-in-time stars count observed on a UTC calendar day (from sync)."""
+
+    __tablename__ = "daily_stars"
+
+    repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id"), primary_key=True)
+    date: Mapped[_date] = mapped_column(Date, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer)
+
+
 class ReferrerSnapshot(Base):
     __tablename__ = "referrer_snapshots"
 
@@ -159,6 +169,7 @@ __all__ = [
     "Base",
     "ChangeEvent",
     "DailyClones",
+    "DailyStars",
     "DailyViews",
     "Etag",
     "PathSnapshot",

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from github_traffic_vault.github_api import GitHubClient
-from github_traffic_vault.models import Repo
+from github_traffic_vault.models import DailyStars, Repo
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +78,8 @@ def _upsert_one(session: Session, payload: dict[str, Any], now: datetime) -> Dis
             last_seen_at=now,
         )
         session.add(repo)
+        session.flush()
+        _record_star_snapshot(session, repo.id, now.date(), stargazers)
         return DiscoveredRepo(repo=repo, is_new=True)
 
     existing.owner = owner
@@ -92,7 +94,17 @@ def _upsert_one(session: Session, payload: dict[str, Any], now: datetime) -> Dis
     if created_at is not None:
         existing.created_at = created_at
     existing.last_seen_at = now
+    _record_star_snapshot(session, existing.id, now.date(), stargazers)
     return DiscoveredRepo(repo=existing, is_new=False)
+
+
+def _record_star_snapshot(session: Session, repo_id: int, on: date, count: int) -> None:
+    """Upsert today's star count for period-end historical display."""
+    row = session.get(DailyStars, (repo_id, on))
+    if row is None:
+        session.add(DailyStars(repo_id=repo_id, date=on, count=count))
+    else:
+        row.count = count
 
 
 def _parse_iso(value: str | None) -> datetime | None:

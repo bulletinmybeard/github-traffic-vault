@@ -48,6 +48,7 @@ from github_traffic_vault.web.queries import (
     repo_totals,
     repo_views,
     resolve_period,
+    sort_filter_query_string,
 )
 
 _REPO_FULL_NAME_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
@@ -197,7 +198,7 @@ def create_app(cfg: Config) -> FastAPI:
                 "sort_options": [{"key": k, "label": label} for k, label in SORT_OPTIONS],
                 "filter_options": filter_options,
                 "index_qs": index_query_string(period, sort, filter_),
-                "index_qs_base": period.query_string,
+                "qs_keep": sort_filter_query_string(sort, filter_),
                 "sparkline_payload": sparkline_payload,
                 "show_sync_meta": True,
                 "show_sync_button": True,

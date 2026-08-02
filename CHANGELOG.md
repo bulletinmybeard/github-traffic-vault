@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detail **Repository status** card splits **GitHub** (CI, release, PRs) from **Local checkout** (path, branch, worktree, origin, upstream)
 - CI runs on all pull requests (not only into `master`)
 - Release workflow fails if the `v*` tag does not match `pyproject.toml` package version
+- Index period / sort / filter GET params are preserved when changing any of them
+- Index and detail can show period-end star counts next to current stars (from `daily_stars` snapshots written on each sync)
 
 ## [0.6.0] - 2026-07-09
 
