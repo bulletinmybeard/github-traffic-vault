@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "github-traffic-vault"
-version = "0.6.0"
+version = "0.7.0"
 description = "Permanently archive GitHub repo traffic data (views, clones, referrers, paths)"
 authors = ["Robin Schulz <bulletinmybeard@gmail.com>"]
 license = "MIT"

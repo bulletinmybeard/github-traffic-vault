@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-02
+
 ### Added
 
 - **Scoped detail sync:** on repository detail pages where **Sync Now** syncs only that repo (skips full discovery). The index (and settings) **Sync Now** still discovers and syncs all repositories
